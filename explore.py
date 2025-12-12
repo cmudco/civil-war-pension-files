@@ -32,23 +32,34 @@ import sys
 # ============================================================================
 # CONFIGURATION - Change these variables to control what the script does
 # ============================================================================
-MODE = "extract"  # "export" to convert PDF to images, "extract" to extract text from image
+MODE = "extract"  # "export" to convert PDF to images, "extract" to extract text from image, "extract_pdf" to extract text from PDF
 
 # For export mode:
 PDF_PATH = r"pension-files/scott-joseph/Scott-Joseph.pdf"
-PAGE_NUMBER = 2  # Which page to export (1-indexed)
+PAGE_NUMBER = 3  # Which page to export (1-indexed)
 
 # For extract mode:
-IMAGE_PATH = r"outputs/images/scott-joseph/page_2.png"
+IMAGE_PATH = r"outputs/images/scott-joseph/page_3.png"
+
+# For extract_pdf mode:
+PDF_PATH_FOR_EXTRACTION = r"pension-files/scott-joseph/Scott-Joseph Page 01.pdf"
 
 # Output directory for exported images
 OUTPUT_DIR = r"outputs/images/scott-joseph"
 
-# Setup prompt
-PROMPT1 = "We have scans from Civil War pension files from the National Archives. We want to go through and extract the text of each of these files and preserve all of the structure of the original document. We want to create a 1:1 digital representation of the original documents we can use for later analysis. Please extract the text from this image with correct formatting and all original structure preserved. These are written in old cursive handwriting styles. It is very important we get names and numbers correct. Please absolutely no other formatting than what is found on the document, no intro text nothing, just the text as found on the document. Here is the image."
-
-PROMPT = "Prompted I want a transcription of this file. first look at all the page formats, many of these are forms. you should first transcribe the form and its intent, then in bold transcribe the handwriting. try to preserve the same page numbers and formatting as much as possible. names are of particular importance, then other proper names as well. mark all of these for validationa and provide a confidence score from 1-5 (5 being the best) in the end we will be creating a database of data extracted from files like this. make an artifact, not in conversation.  we want to create 1:1 transcriptions where possible, glad ambiguity."
+# Prompt file path (markdown file containing LLM extraction instructions)
+PROMPT_FILE = r"prompts/basic-extract.md"
 # ============================================================================
+
+def load_prompt_from_file(prompt_file_path):
+    """Load prompt text from a markdown file"""
+    try:
+        with open(prompt_file_path, 'r', encoding='utf-8') as f:
+            return f.read().strip()
+    except FileNotFoundError:
+        print(f"Warning: Prompt file not found at {prompt_file_path}")
+        print("Using default prompt instead.")
+        return "Please extract all text from this document, preserving the original structure and formatting."
 
 def export_pdf_to_images(pdf_path, output_dir, page_number=None):
     """Convert PDF page to image"""
@@ -137,10 +148,11 @@ def extract_text_from_image(image_path):
     """Send image to Claude and extract text"""
     print(f"\nProcessing image: {image_path}\n")
 
+    # Load prompt from file
+    prompt = load_prompt_from_file(PROMPT_FILE)
+
     # Prepare image
     image_data = prepare_image_for_claude(image_path)
-
-    
 
     # Call Claude API
     ant_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
@@ -161,7 +173,55 @@ def extract_text_from_image(image_path):
                     },
                     {
                         "type": "text",
-                        "text": PROMPT
+                        "text": prompt
+                    }
+                ],
+            }
+        ],
+    )
+
+    # Print extracted text
+    print("\n" + "="*80)
+    print("EXTRACTED TEXT:")
+    print("="*80)
+    print(message.content[0].text)
+    print("="*80)
+
+def extract_text_from_pdf(pdf_path):
+    """Send PDF to Claude and extract text"""
+    print(f"\nProcessing PDF: {pdf_path}\n")
+
+    # Load prompt from file
+    prompt = load_prompt_from_file(PROMPT_FILE)
+
+    # Read PDF file and encode to base64
+    with open(pdf_path, 'rb') as pdf_file:
+        pdf_data = base64.standard_b64encode(pdf_file.read()).decode("utf-8")
+
+    # Get file size
+    file_size = os.path.getsize(pdf_path)
+    print(f"PDF file size: {file_size / 1024 / 1024:.2f} MB")
+
+    # Call Claude API
+    ant_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    message = ant_client.messages.create(
+        model="claude-opus-4-5",
+        max_tokens=4096,
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "document",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "application/pdf",
+                            "data": pdf_data,
+                        },
+                    },
+                    {
+                        "type": "text",
+                        "text": prompt
                     }
                 ],
             }
@@ -181,5 +241,7 @@ if __name__ == "__main__":
         export_pdf_to_images(PDF_PATH, OUTPUT_DIR, PAGE_NUMBER)
     elif MODE == "extract":
         extract_text_from_image(IMAGE_PATH)
+    elif MODE == "extract_pdf":
+        extract_text_from_pdf(PDF_PATH_FOR_EXTRACTION)
     else:
-        print(f"Invalid MODE: {MODE}. Must be 'export' or 'extract'")
+        print(f"Invalid MODE: {MODE}. Must be 'export', 'extract', or 'extract_pdf'")
