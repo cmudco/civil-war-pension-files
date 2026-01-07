@@ -1,3 +1,10 @@
 .env
 /venv
 venv
+/usct_pension_files
+/usct_pension_files
+/usct_pension_files/A_B
+/usct_pension_files
+usct_pension_files
+usct_pension_files/A_B/Abbs Wilkins.pdf
+*.pdf
