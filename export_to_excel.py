@@ -77,11 +77,46 @@ def export_to_excel():
     # Connect to database
     conn = sqlite3.connect(DB_PATH)
 
-    # Read items table
-    print("Reading items table...")
-    query = "SELECT * FROM items"
+    # Read items table with extracted service data
+    print("Reading items table with extracted service data...")
+    query = """
+        SELECT
+            i.*,
+            es.regiment as extracted_regiment,
+            es.company as extracted_company,
+            es.rank as extracted_rank,
+            es.mustered_in_date_place as extracted_mustered_in,
+            es.mustered_out_date_place as extracted_mustered_out,
+            es.other_locations as extracted_locations,
+            es.comrades as extracted_comrades,
+            es.spouse_names as extracted_spouses,
+            es.children as extracted_children,
+            es.veteran_birth as extracted_vet_birth,
+            es.plantation as extracted_plantation,
+            es.enslaver as extracted_enslaver,
+            es.parents as extracted_parents,
+            es.other_family as extracted_other_family,
+            es.wife_birth_place as extracted_wife_birth,
+            es.wife_enslaver as extracted_wife_enslaver,
+            es.wife_parents as extracted_wife_parents,
+            es.wife_other_family as extracted_wife_other_family,
+            es.extraction_model as extraction_model,
+            es.extraction_date as extraction_date,
+            es.status as extraction_status,
+            es.error_message as extraction_error
+        FROM items i
+        LEFT JOIN extracted_service_data es ON i.id = es.item_id
+    """
     df = pd.read_sql_query(query, conn)
     print(f"Found {len(df)} items")
+
+    # Count how many have extractions
+    extracted_count = df['extraction_status'].notna().sum()
+    print(f"  {extracted_count} items have extracted service data")
+    if extracted_count > 0:
+        completed_count = (df['extraction_status'] == 'completed').sum()
+        error_count = (df['extraction_status'] == 'error').sum()
+        print(f"  {completed_count} successful extractions, {error_count} with errors")
 
     # Extract metadata fields into separate columns
     print("Extracting metadata fields...")
@@ -105,9 +140,23 @@ def export_to_excel():
     print(f"  Output file: {OUTPUT_FILE}")
     print(f"  Total rows: {len(df_export)}")
     print(f"  Total columns: {len(df_export.columns)}")
-    print("\nColumns included:")
-    for col in df_export.columns:
-        print(f"  - {col}")
+
+    # Show extracted service data statistics
+    if extracted_count > 0:
+        print("\nExtracted service data columns:")
+        extracted_cols = [col for col in df_export.columns if col.startswith('extracted_')]
+        for col in extracted_cols:
+            non_null = df_export[col].notna().sum()
+            print(f"  - {col}: {non_null} non-null values")
+
+    print("\nColumn organization:")
+    print("  - Original: id, title, surname, item_set_id, letter_range, status, etc.")
+    print("  - Metadata (meta_*): dc_description, dc_date, dc_coverage, etc.")
+    if extracted_count > 0:
+        print("  - Extracted (extracted_*): regiment, company, rank, mustered_in, etc.")
+        print("  - Extraction metadata: extraction_model, extraction_date, extraction_status")
+    else:
+        print("  - No extracted service data yet (run extract_service_data.py first)")
     print("="*70)
 
     conn.close()
