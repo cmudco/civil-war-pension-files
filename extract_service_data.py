@@ -33,8 +33,8 @@ LOG_FILE = "extraction.log"
 OPENAI_MODEL = "gpt-5-nano"  # Cost: $0.05/$0.40 per 1M tokens
 
 # Batch processing settings
-BATCH_LIMIT = 1  # Process up to N unprocessed records (None for all)
-RETRY_ERRORS = False  # Whether to retry previously failed extractions
+BATCH_LIMIT = 100  # Process up to N unprocessed records (None for all)
+RETRY_ERRORS = True  # Whether to retry previously failed extractions
 
 # API settings
 REQUEST_TIMEOUT = 60  # Timeout for API requests in seconds
@@ -179,6 +179,9 @@ def init_extraction_table(conn):
             extraction_model TEXT,
             extraction_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             processing_time_ms INTEGER,
+            input_tokens INTEGER,
+            output_tokens INTEGER,
+            extraction_cost REAL,
             status TEXT DEFAULT 'pending',
             error_message TEXT,
 
@@ -191,6 +194,22 @@ def init_extraction_table(conn):
     conn.execute("CREATE INDEX IF NOT EXISTS idx_extracted_status ON extracted_service_data(status)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_extracted_item_id ON extracted_service_data(item_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_extracted_date ON extracted_service_data(extraction_date DESC)")
+
+    # Add new columns if they don't exist (for existing tables)
+    cursor = conn.execute("PRAGMA table_info(extracted_service_data)")
+    existing_columns = {row[1] for row in cursor.fetchall()}
+
+    if 'input_tokens' not in existing_columns:
+        conn.execute("ALTER TABLE extracted_service_data ADD COLUMN input_tokens INTEGER")
+        logging.info("Added input_tokens column")
+
+    if 'output_tokens' not in existing_columns:
+        conn.execute("ALTER TABLE extracted_service_data ADD COLUMN output_tokens INTEGER")
+        logging.info("Added output_tokens column")
+
+    if 'extraction_cost' not in existing_columns:
+        conn.execute("ALTER TABLE extracted_service_data ADD COLUMN extraction_cost REAL")
+        logging.info("Added extraction_cost column")
 
     conn.commit()
     logging.info("Extraction table initialized")
@@ -259,7 +278,8 @@ def get_unprocessed_items(conn, limit=None, retry_errors=False):
     return results
 
 def record_extraction(conn, item_id, extracted_data, model_name,
-                     processing_time_ms, raw_description, status='completed',
+                     processing_time_ms, raw_description, input_tokens=None,
+                     output_tokens=None, extraction_cost=None, status='completed',
                      error_message=None):
     """Record extraction results in database."""
 
@@ -303,6 +323,9 @@ def record_extraction(conn, item_id, extracted_data, model_name,
                 extraction_model = ?,
                 extraction_date = CURRENT_TIMESTAMP,
                 processing_time_ms = ?,
+                input_tokens = ?,
+                output_tokens = ?,
+                extraction_cost = ?,
                 status = ?,
                 error_message = ?
             WHERE item_id = ?
@@ -328,6 +351,9 @@ def record_extraction(conn, item_id, extracted_data, model_name,
             raw_description,
             model_name,
             processing_time_ms,
+            input_tokens,
+            output_tokens,
+            extraction_cost,
             status,
             error_message,
             item_id
@@ -343,8 +369,9 @@ def record_extraction(conn, item_id, extracted_data, model_name,
                 other_family, wife_birth_place, wife_enslaver,
                 wife_parents, wife_other_family,
                 raw_description, extraction_model, processing_time_ms,
+                input_tokens, output_tokens, extraction_cost,
                 status, error_message
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             item_id,
             data_dict['regiment'],
@@ -368,6 +395,9 @@ def record_extraction(conn, item_id, extracted_data, model_name,
             raw_description,
             model_name,
             processing_time_ms,
+            input_tokens,
+            output_tokens,
+            extraction_cost,
             status,
             error_message
         ))
@@ -409,7 +439,7 @@ def extract_service_data(client, description_text, model=OPENAI_MODEL):
         model: OpenAI model to use
 
     Returns:
-        Tuple of (MilitaryServiceData, processing_time_ms)
+        Tuple of (MilitaryServiceData, processing_time_ms, input_tokens, output_tokens, cost)
 
     Raises:
         openai.APIError: If API call fails after retries
@@ -453,11 +483,30 @@ def extract_service_data(client, description_text, model=OPENAI_MODEL):
         # Extract the parsed data
         extracted_data = completion.choices[0].message.parsed
 
+        # Get token usage
+        usage = completion.usage
+        input_tokens = usage.prompt_tokens if usage else 0
+        output_tokens = usage.completion_tokens if usage else 0
+
+        # Calculate cost based on model pricing
+        # gpt-5-nano: $0.05 per 1M input tokens, $0.40 per 1M output tokens
+        input_cost = (input_tokens / 1_000_000) * 0.05
+        output_cost = (output_tokens / 1_000_000) * 0.40
+        total_cost = input_cost + output_cost
+
         # Print response debug information
         print("\n" + "=" * 80)
         print("API RESPONSE DEBUG")
         print("=" * 80)
         print(f"Processing time: {processing_time_ms}ms")
+        print(f"\nToken Usage:")
+        print(f"  Input tokens: {input_tokens:,}")
+        print(f"  Output tokens: {output_tokens:,}")
+        print(f"  Total tokens: {input_tokens + output_tokens:,}")
+        print(f"\nCost Breakdown:")
+        print(f"  Input cost:  ${input_cost:.6f}")
+        print(f"  Output cost: ${output_cost:.6f}")
+        print(f"  Total cost:  ${total_cost:.6f}")
         print(f"\nExtracted Data:")
 
         # Print all fields
@@ -469,7 +518,7 @@ def extract_service_data(client, description_text, model=OPENAI_MODEL):
         print("=" * 80)
         print()
 
-        return extracted_data, processing_time_ms
+        return extracted_data, processing_time_ms, input_tokens, output_tokens, total_cost
 
     except openai.APIError as e:
         processing_time_ms = int((time.time() - start_time) * 1000)
@@ -517,7 +566,7 @@ def process_batch(conn, client, batch_limit=None, retry_errors=False):
             # Attempt extraction with retries
             for attempt in range(MAX_RETRIES):
                 try:
-                    extracted_data, processing_time_ms = extract_service_data(
+                    extracted_data, processing_time_ms, input_tokens, output_tokens, cost = extract_service_data(
                         client,
                         description,
                         OPENAI_MODEL
@@ -531,6 +580,9 @@ def process_batch(conn, client, batch_limit=None, retry_errors=False):
                         OPENAI_MODEL,
                         processing_time_ms,
                         description,
+                        input_tokens=input_tokens,
+                        output_tokens=output_tokens,
+                        extraction_cost=cost,
                         status='completed'
                     )
 
@@ -557,6 +609,9 @@ def process_batch(conn, client, batch_limit=None, retry_errors=False):
                             OPENAI_MODEL,
                             0,
                             description,
+                            input_tokens=None,
+                            output_tokens=None,
+                            extraction_cost=None,
                             status='error',
                             error_message=error_msg
                         )
@@ -575,6 +630,9 @@ def process_batch(conn, client, batch_limit=None, retry_errors=False):
                         OPENAI_MODEL,
                         0,
                         description,
+                        input_tokens=None,
+                        output_tokens=None,
+                        extraction_cost=None,
                         status='error',
                         error_message=error_msg
                     )

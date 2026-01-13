@@ -102,6 +102,9 @@ def export_to_excel():
             es.wife_other_family as extracted_wife_other_family,
             es.extraction_model as extraction_model,
             es.extraction_date as extraction_date,
+            es.input_tokens as extraction_input_tokens,
+            es.output_tokens as extraction_output_tokens,
+            es.extraction_cost as extraction_cost,
             es.status as extraction_status,
             es.error_message as extraction_error
         FROM items i
@@ -149,12 +152,25 @@ def export_to_excel():
             non_null = df_export[col].notna().sum()
             print(f"  - {col}: {non_null} non-null values")
 
+        # Show cost statistics
+        total_cost = df_export['extraction_cost'].sum()
+        avg_cost = df_export['extraction_cost'].mean()
+        total_input_tokens = df_export['extraction_input_tokens'].sum()
+        total_output_tokens = df_export['extraction_output_tokens'].sum()
+
+        print(f"\nCost Statistics:")
+        print(f"  - Total extractions: {completed_count}")
+        print(f"  - Total cost: ${total_cost:.4f}")
+        print(f"  - Average cost per extraction: ${avg_cost:.6f}")
+        print(f"  - Total input tokens: {int(total_input_tokens):,}")
+        print(f"  - Total output tokens: {int(total_output_tokens):,}")
+
     print("\nColumn organization:")
     print("  - Original: id, title, surname, item_set_id, letter_range, status, etc.")
     print("  - Metadata (meta_*): dc_description, dc_date, dc_coverage, etc.")
     if extracted_count > 0:
         print("  - Extracted (extracted_*): regiment, company, rank, mustered_in, etc.")
-        print("  - Extraction metadata: extraction_model, extraction_date, extraction_status")
+        print("  - Extraction metadata: model, date, tokens, cost, status")
     else:
         print("  - No extracted service data yet (run extract_service_data.py first)")
     print("="*70)
