@@ -11,9 +11,11 @@ import json
 import logging
 import time
 import os
+import threading
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, Dict, Any, Tuple, List
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import openai
 from openai import OpenAI
@@ -33,8 +35,9 @@ LOG_FILE = "extraction.log"
 OPENAI_MODEL = "gpt-5-nano"  # Cost: $0.05/$0.40 per 1M tokens
 
 # Batch processing settings
-BATCH_LIMIT = 100  # Process up to N unprocessed records (None for all)
+BATCH_LIMIT = None # Process up to N unprocessed records (None for all)
 RETRY_ERRORS = True  # Whether to retry previously failed extractions
+CONCURRENT_REQUESTS = 10  # Number of concurrent API requests to run in parallel
 
 # API settings
 REQUEST_TIMEOUT = 60  # Timeout for API requests in seconds
@@ -448,17 +451,7 @@ def extract_service_data(client, description_text, model=OPENAI_MODEL):
     start_time = time.time()
 
     system_prompt = "Extract military service data from Civil War pension file descriptions. Extract field values exactly as written. If a field says 'Not listed', extract 'Not listed'."
-
     user_prompt = f"Extract the military service data from this description:\n\n{description_text}"
-
-    # Print debug information
-    print("\n" + "=" * 80)
-    print("API REQUEST DEBUG")
-    print("=" * 80)
-    print(f"Model: {model}")
-    print(f"\nSystem Prompt:\n{system_prompt}")
-    print(f"\nUser Prompt:\n{user_prompt}")
-    print("=" * 80)
 
     try:
         # Create chat completion with structured output
@@ -494,35 +487,10 @@ def extract_service_data(client, description_text, model=OPENAI_MODEL):
         output_cost = (output_tokens / 1_000_000) * 0.40
         total_cost = input_cost + output_cost
 
-        # Print response debug information
-        print("\n" + "=" * 80)
-        print("API RESPONSE DEBUG")
-        print("=" * 80)
-        print(f"Processing time: {processing_time_ms}ms")
-        print(f"\nToken Usage:")
-        print(f"  Input tokens: {input_tokens:,}")
-        print(f"  Output tokens: {output_tokens:,}")
-        print(f"  Total tokens: {input_tokens + output_tokens:,}")
-        print(f"\nCost Breakdown:")
-        print(f"  Input cost:  ${input_cost:.6f}")
-        print(f"  Output cost: ${output_cost:.6f}")
-        print(f"  Total cost:  ${total_cost:.6f}")
-        print(f"\nExtracted Data:")
-
-        # Print all fields
-        data_dict = extracted_data.model_dump()
-        for field_name, field_value in data_dict.items():
-            status = "✓" if field_value else "✗"
-            print(f"  {status} {field_name}: {repr(field_value)}")
-
-        print("=" * 80)
-        print()
-
         return extracted_data, processing_time_ms, input_tokens, output_tokens, total_cost
 
     except openai.APIError as e:
         processing_time_ms = int((time.time() - start_time) * 1000)
-        print(f"\nAPI ERROR: {e}")
         logging.error(f"OpenAI API error: {e}")
         raise
 
@@ -530,51 +498,43 @@ def extract_service_data(client, description_text, model=OPENAI_MODEL):
 # MAIN PROCESSING LOOP
 # ============================================================================
 
-def process_batch(conn, client, batch_limit=None, retry_errors=False):
+def process_single_item(client, db_path, db_lock, item_id, description):
     """
-    Process a batch of unprocessed items with progress tracking.
+    Process a single item with retry logic.
+    Creates its own database connection for thread safety, uses lock for writes.
 
     Args:
-        conn: Database connection
         client: OpenAI client
-        batch_limit: Maximum number of items to process
-        retry_errors: Whether to retry previously failed items
+        db_path: Path to database file
+        db_lock: Threading lock for database writes
+        item_id: Item ID
+        description: Description text
+
+    Returns:
+        Tuple of (success: bool, processing_time_ms: int)
     """
+    if not description:
+        logging.warning(f"Item {item_id} has no description, skipping")
+        return False, 0
 
-    # Get items to process
-    items_to_process = get_unprocessed_items(conn, batch_limit, retry_errors)
+    # Create thread-local database connection
+    thread_conn = sqlite3.connect(db_path, timeout=30.0)
+    thread_conn.execute("PRAGMA journal_mode=WAL")
 
-    if not items_to_process:
-        logging.info("No items to process")
-        return
+    try:
+        # Attempt extraction with retries
+        for attempt in range(MAX_RETRIES):
+            try:
+                extracted_data, processing_time_ms, input_tokens, output_tokens, cost = extract_service_data(
+                    client,
+                    description,
+                    OPENAI_MODEL
+                )
 
-    logging.info(f"Processing {len(items_to_process)} items...")
-
-    success_count = 0
-    error_count = 0
-    total_processing_time_ms = 0
-
-    # Process with progress bar
-    with tqdm(total=len(items_to_process), desc="Extracting service data") as pbar:
-        for item_id, description in items_to_process:
-
-            if not description:
-                logging.warning(f"Item {item_id} has no description, skipping")
-                pbar.update(1)
-                continue
-
-            # Attempt extraction with retries
-            for attempt in range(MAX_RETRIES):
-                try:
-                    extracted_data, processing_time_ms, input_tokens, output_tokens, cost = extract_service_data(
-                        client,
-                        description,
-                        OPENAI_MODEL
-                    )
-
-                    # Record success
+                # Record success with lock to prevent concurrent writes
+                with db_lock:
                     record_extraction(
-                        conn,
+                        thread_conn,
                         item_id,
                         extracted_data,
                         OPENAI_MODEL,
@@ -586,24 +546,22 @@ def process_batch(conn, client, batch_limit=None, retry_errors=False):
                         status='completed'
                     )
 
-                    success_count += 1
-                    total_processing_time_ms += processing_time_ms
-                    pbar.set_postfix_str(f"✓ {success_count} | ✗ {error_count}")
-                    break
+                return True, processing_time_ms
 
-                except openai.APIError as e:
-                    if attempt < MAX_RETRIES - 1:
-                        # Retry with exponential backoff
-                        delay = RETRY_DELAY * (2 ** attempt)
-                        logging.warning(f"API error for item {item_id}, retrying in {delay}s...")
-                        time.sleep(delay)
-                    else:
-                        # Final attempt failed
-                        error_msg = str(e)
-                        logging.error(f"Failed to extract item {item_id} after {MAX_RETRIES} attempts: {error_msg}")
+            except openai.APIError as e:
+                if attempt < MAX_RETRIES - 1:
+                    # Retry with exponential backoff
+                    delay = RETRY_DELAY * (2 ** attempt)
+                    logging.warning(f"API error for item {item_id}, retrying in {delay}s...")
+                    time.sleep(delay)
+                else:
+                    # Final attempt failed
+                    error_msg = str(e)
+                    logging.error(f"Failed to extract item {item_id} after {MAX_RETRIES} attempts: {error_msg}")
 
+                    with db_lock:
                         record_extraction(
-                            conn,
+                            thread_conn,
                             item_id,
                             None,
                             OPENAI_MODEL,
@@ -616,15 +574,15 @@ def process_batch(conn, client, batch_limit=None, retry_errors=False):
                             error_message=error_msg
                         )
 
-                        error_count += 1
-                        pbar.set_postfix_str(f"✓ {success_count} | ✗ {error_count}")
+                    return False, 0
 
-                except Exception as e:
-                    error_msg = str(e)
-                    logging.error(f"Unexpected error for item {item_id}: {error_msg}")
+            except Exception as e:
+                error_msg = str(e)
+                logging.error(f"Unexpected error for item {item_id}: {error_msg}")
 
+                with db_lock:
                     record_extraction(
-                        conn,
+                        thread_conn,
                         item_id,
                         None,
                         OPENAI_MODEL,
@@ -637,11 +595,70 @@ def process_batch(conn, client, batch_limit=None, retry_errors=False):
                         error_message=error_msg
                     )
 
+                return False, 0
+
+    finally:
+        # Always close the thread-local connection
+        thread_conn.close()
+
+    return False, 0
+
+def process_batch(conn, client, db_path, batch_limit=None, retry_errors=False, concurrent_requests=CONCURRENT_REQUESTS):
+    """
+    Process a batch of unprocessed items with concurrent API requests.
+
+    Args:
+        conn: Database connection (for reading)
+        client: OpenAI client
+        db_path: Path to database file
+        batch_limit: Maximum number of items to process
+        retry_errors: Whether to retry previously failed items
+        concurrent_requests: Number of concurrent API requests
+    """
+
+    # Get items to process
+    items_to_process = get_unprocessed_items(conn, batch_limit, retry_errors)
+
+    if not items_to_process:
+        logging.info("No items to process")
+        return
+
+    logging.info(f"Processing {len(items_to_process)} items with {concurrent_requests} concurrent requests...")
+
+    success_count = 0
+    error_count = 0
+    total_processing_time_ms = 0
+
+    # Create lock for database writes
+    db_lock = threading.Lock()
+
+    # Process with ThreadPoolExecutor for concurrent requests
+    with ThreadPoolExecutor(max_workers=concurrent_requests) as executor:
+        # Submit all tasks
+        future_to_item = {
+            executor.submit(process_single_item, client, db_path, db_lock, item_id, description): item_id
+            for item_id, description in items_to_process
+        }
+
+        # Process completed tasks with progress bar
+        with tqdm(total=len(items_to_process), desc="Extracting service data") as pbar:
+            for future in as_completed(future_to_item):
+                item_id = future_to_item[future]
+                try:
+                    success, processing_time_ms = future.result()
+                    if success:
+                        success_count += 1
+                        total_processing_time_ms += processing_time_ms
+                    else:
+                        error_count += 1
+
+                    pbar.set_postfix_str(f"✓ {success_count} | ✗ {error_count}")
+                except Exception as e:
+                    logging.error(f"Task failed for item {item_id}: {e}")
                     error_count += 1
                     pbar.set_postfix_str(f"✓ {success_count} | ✗ {error_count}")
-                    break
 
-            pbar.update(1)
+                pbar.update(1)
 
     # Print summary
     avg_time = total_processing_time_ms / success_count if success_count > 0 else 0
@@ -684,6 +701,7 @@ def main():
     logging.info(f"Model: {OPENAI_MODEL}")
     logging.info(f"Batch limit: {BATCH_LIMIT if BATCH_LIMIT else 'All'}")
     logging.info(f"Retry errors: {RETRY_ERRORS}")
+    logging.info(f"Concurrent requests: {CONCURRENT_REQUESTS}")
     logging.info("=" * 70)
 
     # Initialize OpenAI client
@@ -702,8 +720,8 @@ def main():
     stats_before = get_extraction_statistics(conn)
     logging.info(f"Initial status: {stats_before['completed']} completed, {stats_before['error']} errors, {stats_before['pending']} pending")
 
-    # Process batch
-    process_batch(conn, client, BATCH_LIMIT, RETRY_ERRORS)
+    # Process batch with concurrent requests
+    process_batch(conn, client, db_path, BATCH_LIMIT, RETRY_ERRORS, CONCURRENT_REQUESTS)
 
     # Get final statistics
     stats_after = get_extraction_statistics(conn)
