@@ -18,6 +18,7 @@ POPPLER_PATH = os.getenv("POPPLER_PATH")
 DB_FILE = "transcriber_db.db"
 TRANSCRIPTIONS_DIR = Path("transcriptions")
 BATCH_SIZE = 10
+OVERWRITE = False  # If False, skip pages already in DB / already have a txt file
 
 # Gemini 3.1 Pro Preview pricing (USD per 1M tokens)
 PRICING = {
@@ -69,8 +70,20 @@ def save_txt(pdf_path: Path, page_num: int, text: str) -> Path:
     TRANSCRIPTIONS_DIR.mkdir(exist_ok=True)
     stem = pdf_path.stem.replace(" ", "_")
     txt_path = TRANSCRIPTIONS_DIR / f"{stem}_page{page_num}.txt"
-    txt_path.write_text(text, encoding="utf-8")
+    txt_path.write_text(text or "", encoding="utf-8")
     return txt_path
+
+
+def already_done(con, pdf_file: str, page_num: int) -> bool:
+    """Check if this page already exists in DB and has a txt file."""
+    row = con.execute(
+        "SELECT txt_file FROM transcriptions WHERE pdf_file = ? AND page = ?",
+        (pdf_file, page_num)
+    ).fetchone()
+    if not row:
+        return False
+    txt_path = Path(row[0]) if row[0] else None
+    return txt_path is not None and txt_path.exists()
 
 
 def calc_cost(input_tokens: int, output_tokens: int) -> float:
@@ -113,7 +126,7 @@ async def transcribe_page(sem, con, con_lock, pdf_path: Path, page_num: int,
         out_tok = usage.candidates_token_count or 0
         cost    = calc_cost(in_tok, out_tok)
 
-        txt_path = save_txt(pdf_path, page_num, response.text)
+        txt_path = save_txt(pdf_path, page_num, response.text or "")
 
         async with con_lock:
             log_to_db(
@@ -154,12 +167,18 @@ async def transcribe_pdf_pages_async(pdf_path: str, pages: list[int] | None = No
     start_page = min(pages) if pages else 1
 
     page_image_pairs = []
+    skipped = 0
     for i, image in enumerate(images):
         page_num = start_page + i
         if pages and page_num not in pages:
             continue
+        if not OVERWRITE and already_done(con, str(pdf_path), page_num):
+            skipped += 1
+            continue
         page_image_pairs.append((page_num, image))
 
+    if skipped:
+        print(f"Skipping {skipped} already-completed page(s) (OVERWRITE=False).")
     print(f"Processing {len(page_image_pairs)} pages in batches of {BATCH_SIZE}...")
     run_start = time.time()
 
@@ -199,8 +218,8 @@ def transcribe_pdf_pages(pdf_path: str, pages: list[int] | None = None,
 
 
 if __name__ == "__main__":
-    pdf = "usct_pension_files/A_B/Abbs Wilkins.pdf"
-    pages = None
+    pdf = "usct_pension_files/G_H/Green Moses Civil War Pension.pdf"
+    pages = [26]
 
     transcriptions = transcribe_pdf_pages(pdf, pages)
 
