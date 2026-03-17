@@ -6,7 +6,7 @@
 - Output only the text as it appears on the document. Do not add headings, introductions, explanations, or any other formatting not present in the original.
 - Preserve line breaks, spacing, punctuation, and layout as found on the document.
 - The document often contains stamps which were added on top of the document, please do not include these in the 1:1 transcription but rather have a small STAMPS section at the end where you list the stamps contents only.   When listing the stamps content please just the stamps themselves no additional commentary or explanations.
-- Please pay careful attention to the names.  The names are the most important part of this project.  
+- Please pay careful attention to the names.  The names are the most important part of this project.  You will see we include the filename of the claimant, this filename is usually the correct name of the individual claimant, please use this as a reference when transcribing names in the text.
 
 
 # File Information

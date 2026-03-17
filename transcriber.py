@@ -1,5 +1,7 @@
 import os
 import time
+import sqlite3
+from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
 from google import genai
@@ -12,12 +14,61 @@ load_dotenv()
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 POPPLER_PATH = os.getenv("POPPLER_PATH")
 
+DB_FILE = "transcriber_db.db"
+TRANSCRIPTIONS_DIR = Path("transcriptions")
+
 # Gemini 3.1 Pro Preview pricing (USD per 1M tokens)
 PRICING = {
     "input":  {"short": 2.00,  "long": 4.00},   # <=200k / >200k tokens
     "output": {"short": 12.00, "long": 18.00},
 }
 THRESHOLD = 200_000  # tokens
+
+
+def init_db():
+    con = sqlite3.connect(DB_FILE)
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS transcriptions (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at      TEXT NOT NULL,
+            pdf_file        TEXT NOT NULL,
+            page            INTEGER NOT NULL,
+            prompt_name     TEXT NOT NULL,
+            prompt_text     TEXT NOT NULL,
+            model           TEXT NOT NULL,
+            elapsed_seconds REAL,
+            input_tokens    INTEGER,
+            output_tokens   INTEGER,
+            cost_usd        REAL,
+            txt_file        TEXT,
+            result          TEXT
+        )
+    """)
+    con.commit()
+    return con
+
+
+def log_to_db(con, *, pdf_file, page, prompt_name, prompt_text, model,
+              elapsed, in_tok, out_tok, cost, txt_file, result):
+    con.execute("""
+        INSERT INTO transcriptions
+            (created_at, pdf_file, page, prompt_name, prompt_text, model,
+             elapsed_seconds, input_tokens, output_tokens, cost_usd, txt_file, result)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        datetime.utcnow().isoformat(),
+        pdf_file, page, prompt_name, prompt_text, model,
+        elapsed, in_tok, out_tok, cost, txt_file, result,
+    ))
+    con.commit()
+
+
+def save_txt(pdf_path: Path, page_num: int, text: str) -> Path:
+    TRANSCRIPTIONS_DIR.mkdir(exist_ok=True)
+    stem = pdf_path.stem.replace(" ", "_")
+    txt_path = TRANSCRIPTIONS_DIR / f"{stem}_page{page_num}.txt"
+    txt_path.write_text(text, encoding="utf-8")
+    return txt_path
 
 
 def calc_cost(input_tokens: int, output_tokens: int) -> float:
@@ -32,19 +83,23 @@ def load_prompt(name: str) -> str:
     return prompt_path.read_text(encoding="utf-8")
 
 
-def transcribe_pdf_pages(pdf_path: str, pages: list[int] | None = None) -> dict[int, str]:
+def transcribe_pdf_pages(pdf_path: str, pages: list[int] | None = None,
+                         prompt_name: str = "basic-extract") -> dict[int, str]:
     """
     Transcribe pages from a PDF file using Gemini.
 
     Args:
         pdf_path: Path to the PDF file
         pages: List of 1-based page numbers to process. If None, processes all pages.
+        prompt_name: Name of the prompt file in prompts/ (without .md)
 
     Returns:
         Dict mapping page number to transcribed text.
     """
     pdf_path = Path(pdf_path)
-    prompt_text = load_prompt("basic-extract").replace("{file_name}", pdf_path.name)
+    prompt_text = load_prompt(prompt_name).replace("{file_name}", pdf_path.name)
+
+    con = init_db()
 
     kwargs = {"pdf_path": str(pdf_path), "dpi": 200}
     if POPPLER_PATH:
@@ -93,11 +148,31 @@ def transcribe_pdf_pages(pdf_path: str, pages: list[int] | None = None) -> dict[
         total_output_tokens += out_tok
         total_cost          += cost
 
+        txt_path = save_txt(pdf_path, page_num, response.text)
+
+        log_to_db(
+            con,
+            pdf_file=str(pdf_path),
+            page=page_num,
+            prompt_name=prompt_name,
+            prompt_text=prompt_text,
+            model="gemini-3.1-pro-preview",
+            elapsed=elapsed,
+            in_tok=in_tok,
+            out_tok=out_tok,
+            cost=cost,
+            txt_file=str(txt_path),
+            result=response.text,
+        )
+
         print(f"  Time:   {elapsed:.1f}s")
         print(f"  Tokens: {in_tok:,} in / {out_tok:,} out")
         print(f"  Cost:   ${cost:.6f}")
+        print(f"  Saved:  {txt_path}")
 
         results[page_num] = response.text
+
+    con.close()
 
     total_elapsed = time.time() - run_start
     print(f"\n{'─'*40}")
@@ -112,7 +187,7 @@ def transcribe_pdf_pages(pdf_path: str, pages: list[int] | None = None) -> dict[
 
 if __name__ == "__main__":
     pdf = "usct_pension_files/A_B/Abbs Wilkins.pdf"
-    pages = [3]
+    pages = None
 
     transcriptions = transcribe_pdf_pages(pdf, pages)
 
