@@ -11,7 +11,7 @@ load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 DB_FILE = "transcriber_db.db"
-LOG_TO_DB = True  # Set to True to save results to the database
+LOG_TO_DB = True
 
 # OpenAI model pricing (USD per 1M tokens)
 PRICING = {
@@ -223,8 +223,7 @@ def run_extraction(pdf_file: str | None = None, pages: list[int] | None = None,
 
 
 if __name__ == "__main__":
-    # Optional filters for testing
-    pdf_file = "usct_pension_files/A_B/Abbs Wilkins.pdf"
+    pdf_file = "usct_pension_files/G_H/Green Moses Civil War Pension.pdf"
     pages    = None
     model    = DEFAULT_MODEL
 
