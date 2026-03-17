@@ -1,3 +1,4 @@
+import asyncio
 import os
 import time
 import sqlite3
@@ -16,6 +17,7 @@ POPPLER_PATH = os.getenv("POPPLER_PATH")
 
 DB_FILE = "transcriber_db.db"
 TRANSCRIPTIONS_DIR = Path("transcriptions")
+BATCH_SIZE = 10
 
 # Gemini 3.1 Pro Preview pricing (USD per 1M tokens)
 PRICING = {
@@ -83,23 +85,63 @@ def load_prompt(name: str) -> str:
     return prompt_path.read_text(encoding="utf-8")
 
 
-def transcribe_pdf_pages(pdf_path: str, pages: list[int] | None = None,
-                         prompt_name: str = "basic-extract") -> dict[int, str]:
-    """
-    Transcribe pages from a PDF file using Gemini.
+async def transcribe_page(sem, con, con_lock, pdf_path: Path, page_num: int,
+                          image, prompt_text: str, prompt_name: str) -> tuple[int, str]:
+    async with sem:
+        print(f"  Starting page {page_num}...")
+        page_start = time.time()
 
-    Args:
-        pdf_path: Path to the PDF file
-        pages: List of 1-based page numbers to process. If None, processes all pages.
-        prompt_name: Name of the prompt file in prompts/ (without .md)
+        img_bytes = io.BytesIO()
+        image.save(img_bytes, format="JPEG", quality=95)
+        img_bytes.seek(0)
 
-    Returns:
-        Dict mapping page number to transcribed text.
-    """
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(
+            None,
+            lambda: client.models.generate_content(
+                model="gemini-3.1-pro-preview",
+                contents=[
+                    types.Part.from_bytes(data=img_bytes.read(), mime_type="image/jpeg"),
+                    prompt_text,
+                ]
+            )
+        )
+
+        elapsed = time.time() - page_start
+        usage = response.usage_metadata
+        in_tok  = usage.prompt_token_count or 0
+        out_tok = usage.candidates_token_count or 0
+        cost    = calc_cost(in_tok, out_tok)
+
+        txt_path = save_txt(pdf_path, page_num, response.text)
+
+        async with con_lock:
+            log_to_db(
+                con,
+                pdf_file=str(pdf_path),
+                page=page_num,
+                prompt_name=prompt_name,
+                prompt_text=prompt_text,
+                model="gemini-3.1-pro-preview",
+                elapsed=elapsed,
+                in_tok=in_tok,
+                out_tok=out_tok,
+                cost=cost,
+                txt_file=str(txt_path),
+                result=response.text,
+            )
+
+        print(f"  Page {page_num} done — {elapsed:.1f}s | {in_tok:,} in / {out_tok:,} out | ${cost:.6f} | {txt_path}")
+        return page_num, response.text, in_tok, out_tok, cost
+
+
+async def transcribe_pdf_pages_async(pdf_path: str, pages: list[int] | None = None,
+                                     prompt_name: str = "basic-extract") -> dict[int, str]:
     pdf_path = Path(pdf_path)
     prompt_text = load_prompt(prompt_name).replace("{file_name}", pdf_path.name)
 
     con = init_db()
+    con_lock = asyncio.Lock()
 
     kwargs = {"pdf_path": str(pdf_path), "dpi": 200}
     if POPPLER_PATH:
@@ -109,70 +151,36 @@ def transcribe_pdf_pages(pdf_path: str, pages: list[int] | None = None,
         kwargs["last_page"] = max(pages)
 
     images = convert_from_path(**kwargs)
-
     start_page = min(pages) if pages else 1
-    results = {}
 
-    total_input_tokens = 0
-    total_output_tokens = 0
-    total_cost = 0.0
-    run_start = time.time()
-
+    page_image_pairs = []
     for i, image in enumerate(images):
         page_num = start_page + i
         if pages and page_num not in pages:
             continue
+        page_image_pairs.append((page_num, image))
 
-        print(f"Transcribing page {page_num}...")
-        page_start = time.time()
+    print(f"Processing {len(page_image_pairs)} pages in batches of {BATCH_SIZE}...")
+    run_start = time.time()
 
-        img_bytes = io.BytesIO()
-        image.save(img_bytes, format="JPEG", quality=95)
-        img_bytes.seek(0)
+    sem = asyncio.Semaphore(BATCH_SIZE)
+    tasks = [
+        transcribe_page(sem, con, con_lock, pdf_path, page_num, image, prompt_text, prompt_name)
+        for page_num, image in page_image_pairs
+    ]
+    page_results = await asyncio.gather(*tasks)
 
-        response = client.models.generate_content(
-            model="gemini-3.1-pro-preview",
-            contents=[
-                types.Part.from_bytes(data=img_bytes.read(), mime_type="image/jpeg"),
-                prompt_text,
-            ]
-        )
+    con.close()
 
-        elapsed = time.time() - page_start
-        usage = response.usage_metadata
-        in_tok  = usage.prompt_token_count or 0
-        out_tok = usage.candidates_token_count or 0
-        cost    = calc_cost(in_tok, out_tok)
+    results = {}
+    total_input_tokens = total_output_tokens = 0
+    total_cost = 0.0
 
+    for page_num, text, in_tok, out_tok, cost in page_results:
+        results[page_num] = text
         total_input_tokens  += in_tok
         total_output_tokens += out_tok
         total_cost          += cost
-
-        txt_path = save_txt(pdf_path, page_num, response.text)
-
-        log_to_db(
-            con,
-            pdf_file=str(pdf_path),
-            page=page_num,
-            prompt_name=prompt_name,
-            prompt_text=prompt_text,
-            model="gemini-3.1-pro-preview",
-            elapsed=elapsed,
-            in_tok=in_tok,
-            out_tok=out_tok,
-            cost=cost,
-            txt_file=str(txt_path),
-            result=response.text,
-        )
-
-        print(f"  Time:   {elapsed:.1f}s")
-        print(f"  Tokens: {in_tok:,} in / {out_tok:,} out")
-        print(f"  Cost:   ${cost:.6f}")
-        print(f"  Saved:  {txt_path}")
-
-        results[page_num] = response.text
-
-    con.close()
 
     total_elapsed = time.time() - run_start
     print(f"\n{'─'*40}")
@@ -183,6 +191,11 @@ def transcribe_pdf_pages(pdf_path: str, pages: list[int] | None = None,
     print(f"{'─'*40}\n")
 
     return results
+
+
+def transcribe_pdf_pages(pdf_path: str, pages: list[int] | None = None,
+                         prompt_name: str = "basic-extract") -> dict[int, str]:
+    return asyncio.run(transcribe_pdf_pages_async(pdf_path, pages, prompt_name))
 
 
 if __name__ == "__main__":
