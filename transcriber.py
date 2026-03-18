@@ -218,13 +218,16 @@ def transcribe_pdf_pages(pdf_path: str, pages: list[int] | None = None,
 
 
 if __name__ == "__main__":
-    pdf = "usct_pension_files/G_H/Green Moses Civil War Pension.pdf"
-    pages = [26]
+    files = [
+        ("usct_pension_files/A_B/Barnwell Paul Civil War Pension.pdf", None),
+        ("usct_pension_files/A_B/Brown Frederick Civil War Pension.pdf", None),
+        ("usct_pension_files/A_B/Brown Isaiah Civil War Pension.pdf",   None),
+        ("usct_pension_files/I_J/Jones Jacob Civil War Pension.pdf",    None),
+        ("usct_pension_files/K_L/Legaree Benjamin (aka Williams Ben) Civil War Pension.pdf", None),
+    ]
 
-    transcriptions = transcribe_pdf_pages(pdf, pages)
-
-    for page_num, text in sorted(transcriptions.items()):
+    for pdf, pages in files:
         print(f"\n{'='*60}")
-        print(f"PAGE {page_num}")
+        print(f"Transcribing: {pdf}")
         print('='*60)
-        print(text)
+        transcribe_pdf_pages(pdf, pages)

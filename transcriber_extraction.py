@@ -223,8 +223,18 @@ def run_extraction(pdf_file: str | None = None, pages: list[int] | None = None,
 
 
 if __name__ == "__main__":
-    pdf_file = "usct_pension_files/G_H/Green Moses Civil War Pension.pdf"
-    pages    = None
-    model    = DEFAULT_MODEL
+    model = DEFAULT_MODEL
 
-    run_extraction(pdf_file=pdf_file, pages=pages, model=model)
+    files = [
+        ("usct_pension_files/A_B/Barnwell Paul Civil War Pension.pdf", None),
+        ("usct_pension_files/A_B/Brown Frederick Civil War Pension.pdf", None),
+        ("usct_pension_files/A_B/Brown Isaiah Civil War Pension.pdf",   None),
+        ("usct_pension_files/I_J/Jones Jacob Civil War Pension.pdf",    None),
+        ("usct_pension_files/K_L/Legaree Benjamin (aka Williams Ben) Civil War Pension.pdf", None),
+    ]
+
+    for pdf_file, pages in files:
+        print(f"\n{'='*60}")
+        print(f"Extracting: {pdf_file}")
+        print('='*60)
+        run_extraction(pdf_file=pdf_file, pages=pages, model=model)
