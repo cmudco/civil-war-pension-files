@@ -125,6 +125,76 @@ One row per person mentioned on a page. **This is the primary table for your wor
 
 **Total persons extracted: 2,914 across 7 files.**
 
+> **Tip:** The `transcriptions` table contains the full transcribed text for every page in the `result` column. If you want to read the original document text for a given person record, join `persons` to `transcriptions` via `transcription_id`.
+
+---
+
+## Weaviate Vector Database
+
+In addition to the SQLite database, all transcribed pages have been embedded and uploaded to a **Weaviate** vector database. This allows you to do semantic similarity search across the full text of all 729 pages.
+
+### Connection Details
+
+| | |
+|---|---|
+| HTTP host | `weaviate.hss.cmu.edu` |
+| gRPC host | `grpc-weaviate.hss.cmu.edu` |
+| Port (both) | `443` (secure) |
+| Collection | `CivilWarPensionPage` |
+| Access | **Read-only** |
+
+> **You must be on the CMU network to connect.** Either be physically on campus or connect via the CMU VPN before running any Weaviate queries.
+> VPN instructions: https://www.cmu.edu/computing/services/endpoint/network-access/vpn/
+
+### API Keys
+
+Your Weaviate API key is in the shared Google Drive folder. Navigate to the `weaviate_keys` folder — inside is a Google Doc with links to individual docs containing each team member's key. Use your key as the `WEAVIATE_KEY` value in your `.env` file.
+
+### How the Data is Structured
+
+Each object in the `CivilWarPensionPage` collection represents one chunk of a transcribed page. Most pages are stored as a single chunk. Pages longer than 5,000 characters are split by greedily packing paragraphs (`\n\n` boundaries) until the next paragraph would push the chunk over 5,000 characters — at which point that paragraph starts a new chunk. Chunks overlap by ~400 characters so context is preserved at boundaries.
+
+| Property | Type | Description |
+|---|---|---|
+| `text` | text | The chunk content |
+| `transcription_id` | int | Links back to `transcriptions.id` in the SQLite DB |
+| `pdf_file` | text | Full path to the source PDF |
+| `pdf_stem` | text | Filename without extension (e.g. `Barnwell Paul Civil War Pension`) |
+| `page` | int | Page number within the PDF |
+| `chunk_index` | int | 0-based index of this chunk within the page |
+| `total_chunks` | int | Total number of chunks for this page |
+
+### Connecting in Python
+
+```python
+import os
+import weaviate
+from weaviate.auth import AuthApiKey
+from dotenv import load_dotenv
+
+load_dotenv()
+
+client = weaviate.connect_to_custom(
+    http_host="weaviate.hss.cmu.edu",
+    http_port=443,
+    http_secure=True,
+    grpc_host="grpc-weaviate.hss.cmu.edu",
+    grpc_port=443,
+    grpc_secure=True,
+    auth_credentials=AuthApiKey(os.getenv("WEAVIATE_KEY")),
+)
+
+collection = client.collections.get("CivilWarPensionPage")
+
+# Semantic search example
+results = collection.query.near_text(query="medical examination", limit=5)
+for obj in results.objects:
+    p = obj.properties
+    print(f"{p['pdf_stem']}  page {p['page']}: {p['text'][:200]}")
+
+client.close()
+```
+
 ---
 
 ## Your Task
