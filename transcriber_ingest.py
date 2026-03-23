@@ -23,7 +23,7 @@ SLEEP_BETWEEN_EMBEDS = 0.2
 WEAVIATE_HTTP_PORT   = 443
 WEAVIATE_GRPC_PORT   = 443
 OVERWRITE         = False  # If True, re-ingest pages already in Weaviate
-NUKE_AND_RECREATE = True  # If True, drop and recreate the entire collection before ingesting
+NUKE_AND_RECREATE = False  # If True, drop and recreate the entire collection before ingesting
 LIMIT             = None   # Set to int to cap pages processed
 
 

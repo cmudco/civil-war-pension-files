@@ -87,6 +87,14 @@ def init_db():
     return con
 
 
+def already_extracted(con, pdf_file: str, page: int) -> bool:
+    row = con.execute(
+        "SELECT id FROM extraction_runs WHERE pdf_file = ? AND page = ?",
+        (pdf_file, page)
+    ).fetchone()
+    return row is not None
+
+
 def get_transcriptions(con, pdf_file: str | None = None, pages: list[int] | None = None):
     query = "SELECT id, pdf_file, page, result FROM transcriptions WHERE result IS NOT NULL"
     params = []
@@ -191,6 +199,18 @@ def run_extraction(pdf_file: str | None = None, pages: list[int] | None = None,
             con.close()
         return
 
+    if LOG_TO_DB and con:
+        rows = [r for r in rows if not already_extracted(con, r[1], r[2])]
+        skipped = len(get_transcriptions(con, pdf_file=pdf_file, pages=pages)) - len(rows)
+        if skipped:
+            print(f"Skipping {skipped} already-extracted page(s).")
+
+    if not rows:
+        print("All pages already extracted.")
+        if con:
+            con.close()
+        return
+
     db_status = "saving to DB" if LOG_TO_DB else "NOT saving to DB"
     print(f"Running extraction on {len(rows)} page(s) with {model} ({db_status})...\n")
 
@@ -226,11 +246,7 @@ if __name__ == "__main__":
     model = DEFAULT_MODEL
 
     files = [
-        ("usct_pension_files/A_B/Barnwell Paul Civil War Pension.pdf", None),
-        ("usct_pension_files/A_B/Brown Frederick Civil War Pension.pdf", None),
-        ("usct_pension_files/A_B/Brown Isaiah Civil War Pension.pdf",   None),
-        ("usct_pension_files/I_J/Jones Jacob Civil War Pension.pdf",    None),
-        ("usct_pension_files/K_L/Legaree Benjamin (aka Williams Ben) Civil War Pension.pdf", None),
+        ("usct_pension_files/other_files/Robinson, Lucius.pdf", None)
     ]
 
     for pdf_file, pages in files:

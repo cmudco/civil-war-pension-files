@@ -219,11 +219,7 @@ def transcribe_pdf_pages(pdf_path: str, pages: list[int] | None = None,
 
 if __name__ == "__main__":
     files = [
-        ("usct_pension_files/A_B/Barnwell Paul Civil War Pension.pdf", None),
-        ("usct_pension_files/A_B/Brown Frederick Civil War Pension.pdf", None),
-        ("usct_pension_files/A_B/Brown Isaiah Civil War Pension.pdf",   None),
-        ("usct_pension_files/I_J/Jones Jacob Civil War Pension.pdf",    None),
-        ("usct_pension_files/K_L/Legaree Benjamin (aka Williams Ben) Civil War Pension.pdf", None),
+        ("usct_pension_files/other_files/Robinson, Lucius.pdf", None)
     ]
 
     for pdf, pages in files:
