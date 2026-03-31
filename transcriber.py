@@ -17,6 +17,7 @@ POPPLER_PATH = os.getenv("POPPLER_PATH")
 
 DB_FILE = "transcriber_db.db"
 TRANSCRIPTIONS_DIR = Path("transcriptions")
+IMAGES_DIR = Path("images")
 BATCH_SIZE = 10
 OVERWRITE = False  # If False, skip pages already in DB / already have a txt file
 
@@ -74,6 +75,14 @@ def save_txt(pdf_path: Path, page_num: int, text: str) -> Path:
     return txt_path
 
 
+def save_image(pdf_path: Path, page_num: int, image) -> Path:
+    IMAGES_DIR.mkdir(exist_ok=True)
+    stem = pdf_path.stem.replace(" ", "_")
+    img_path = IMAGES_DIR / f"{stem}_page{page_num}.jpg"
+    image.save(str(img_path), format="JPEG", quality=95)
+    return img_path
+
+
 def already_done(con, pdf_file: str, page_num: int) -> bool:
     """Check if this page already exists in DB and has a txt file."""
     row = con.execute(
@@ -109,16 +118,27 @@ async def transcribe_page(sem, con, con_lock, pdf_path: Path, page_num: int,
         img_bytes.seek(0)
 
         loop = asyncio.get_event_loop()
-        response = await loop.run_in_executor(
-            None,
-            lambda: client.models.generate_content(
-                model="gemini-3.1-pro-preview",
-                contents=[
-                    types.Part.from_bytes(data=img_bytes.read(), mime_type="image/jpeg"),
-                    prompt_text,
-                ]
-            )
-        )
+        for attempt in range(5):
+            try:
+                img_bytes.seek(0)
+                response = await loop.run_in_executor(
+                    None,
+                    lambda: client.models.generate_content(
+                        model="gemini-3.1-pro-preview",
+                        contents=[
+                            types.Part.from_bytes(data=img_bytes.read(), mime_type="image/jpeg"),
+                            prompt_text,
+                        ]
+                    )
+                )
+                break
+            except Exception as e:
+                if attempt == 4:
+                    print(f"  Page {page_num} failed after 5 attempts: {e}", flush=True)
+                    raise
+                wait = 10 * (attempt + 1)
+                print(f"  Page {page_num} error (attempt {attempt+1}/5), retrying in {wait}s: {e}", flush=True)
+                await asyncio.sleep(wait)
 
         elapsed = time.time() - page_start
         usage = response.usage_metadata
@@ -150,50 +170,47 @@ async def transcribe_page(sem, con, con_lock, pdf_path: Path, page_num: int,
 
 async def transcribe_pdf_pages_async(pdf_path: str, pages: list[int] | None = None,
                                      prompt_name: str = "basic-extract") -> dict[int, str]:
+    from pypdf import PdfReader
+
     pdf_path = Path(pdf_path)
     prompt_text = load_prompt(prompt_name).replace("{file_name}", pdf_path.name)
 
     con = init_db()
     con_lock = asyncio.Lock()
 
-    kwargs = {"pdf_path": str(pdf_path), "dpi": 200}
-    if POPPLER_PATH:
-        kwargs["poppler_path"] = POPPLER_PATH
-    if pages:
-        kwargs["first_page"] = min(pages)
-        kwargs["last_page"] = max(pages)
+    total_pages = len(PdfReader(str(pdf_path)).pages)
+    page_list = pages if pages else list(range(1, total_pages + 1))
 
-    images = convert_from_path(**kwargs)
-    start_page = min(pages) if pages else 1
-
-    page_image_pairs = []
-    skipped = 0
-    for i, image in enumerate(images):
-        page_num = start_page + i
-        if pages and page_num not in pages:
-            continue
-        if not OVERWRITE and already_done(con, str(pdf_path), page_num):
-            skipped += 1
-            continue
-        page_image_pairs.append((page_num, image))
-
+    todo = [p for p in page_list if OVERWRITE or not already_done(con, str(pdf_path), p)]
+    skipped = len(page_list) - len(todo)
     if skipped:
-        print(f"Skipping {skipped} already-completed page(s) (OVERWRITE=False).")
-    print(f"Processing {len(page_image_pairs)} pages in batches of {BATCH_SIZE}...")
+        print(f"Skipping {skipped} already-completed page(s).", flush=True)
+    print(f"Processing {len(todo)} of {total_pages} pages ({BATCH_SIZE} concurrent Gemini calls)...\n", flush=True)
+
     run_start = time.time()
-
     sem = asyncio.Semaphore(BATCH_SIZE)
-    tasks = [
-        transcribe_page(sem, con, con_lock, pdf_path, page_num, image, prompt_text, prompt_name)
-        for page_num, image in page_image_pairs
-    ]
-    page_results = await asyncio.gather(*tasks)
-
-    con.close()
-
     results = {}
     total_input_tokens = total_output_tokens = 0
     total_cost = 0.0
+    loop = asyncio.get_event_loop()
+
+    # Convert pages one at a time sequentially, dispatch Gemini calls async
+    pending = []
+    for idx, page_num in enumerate(todo, 1):
+        print(f"[{idx}/{len(todo)}] Page {page_num} — converting image...", flush=True)
+        kwargs = {"pdf_path": str(pdf_path), "dpi": 200, "first_page": page_num, "last_page": page_num}
+        if POPPLER_PATH:
+            kwargs["poppler_path"] = POPPLER_PATH
+        images = await loop.run_in_executor(None, lambda kw=kwargs: convert_from_path(**kw))
+        image = images[0]
+        save_image(pdf_path, page_num, image)
+        print(f"[{idx}/{len(todo)}] Page {page_num} — image saved, queuing Gemini call...", flush=True)
+        pending.append(transcribe_page(sem, con, con_lock, pdf_path, page_num, image, prompt_text, prompt_name))
+
+    print(f"\nAll images converted. Waiting for {len(pending)} Gemini calls to finish...\n", flush=True)
+    page_results = await asyncio.gather(*pending)
+
+    con.close()
 
     for page_num, text, in_tok, out_tok, cost in page_results:
         results[page_num] = text
@@ -219,7 +236,18 @@ def transcribe_pdf_pages(pdf_path: str, pages: list[int] | None = None,
 
 if __name__ == "__main__":
     files = [
-        ("usct_pension_files/other_files/Robinson, Lucius.pdf", None)
+        ("usct_pension_files/A_B/Brown (John) Mustifer Civil War Pension.pdf", None),
+        ("usct_pension_files/A_B/Brown Adam Civil War Pension.pdf", None),
+        ("usct_pension_files/A_B/Brown George.pdf", None),
+        ("usct_pension_files/A_B/Brown Harry Civil War Pension.pdf", None),
+        ("usct_pension_files/C_D/Cuthbert Sampson Civil War Pension.pdf", None),
+        ("usct_pension_files/C_D/Dulaney Jacob (Jones) Civil War Pension.pdf", None),
+        ("usct_pension_files/E_F/Fields Daniel Civil War Pension.pdf", None),
+        ("usct_pension_files/E_F/Fripp Alfred Civil War Pension.pdf", None),
+        ("usct_pension_files/G_H/Goodwin Robert CIvil War Pension.pdf", None),
+        ("usct_pension_files/I_J/Jenkins July Civil War Pension.pdf", None),
+        ("usct_pension_files/I_J/Jones William Civil War Pension.pdf", None),
+        ("usct_pension_files/K_L/Legare Murray Civil War Pension.pdf", None),
     ]
 
     for pdf, pages in files:
