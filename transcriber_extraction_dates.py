@@ -24,27 +24,24 @@ PRICING = {
 
 DEFAULT_MODEL = "gpt-4o-mini"
 
-SYSTEM_PROMPT = (Path(__file__).parent / "prompts" / "person-extraction.md").read_text(encoding="utf-8")
+SYSTEM_PROMPT = (Path(__file__).parent / "prompts" / "date-extraction.md").read_text(encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------
 # Pydantic models
 # ---------------------------------------------------------------------------
 
-class Person(BaseModel):
-    first_name:     str
-    last_name:      str
-    middle_name:    str
-    middle_initial: str
-    prefix:         str
-    suffix:         str
-    title:          str
-    context:        str
-    reference:      str
+class EventDate(BaseModel):
+    month:     str
+    day:       str
+    year:      str
+    date_type: str
+    context:   str
+    reference: str
 
 
-class PersonList(BaseModel):
-    persons: list[Person]
+class DateList(BaseModel):
+    dates: list[EventDate]
 
 
 # ---------------------------------------------------------------------------
@@ -54,7 +51,7 @@ class PersonList(BaseModel):
 def init_db():
     con = sqlite3.connect(DB_FILE)
     con.execute("""
-        CREATE TABLE IF NOT EXISTS extraction_runs (
+        CREATE TABLE IF NOT EXISTS date_extraction_runs (
             id               INTEGER PRIMARY KEY AUTOINCREMENT,
             created_at       TEXT NOT NULL,
             transcription_id INTEGER,
@@ -64,25 +61,22 @@ def init_db():
             input_tokens     INTEGER,
             output_tokens    INTEGER,
             cost_usd         REAL,
-            persons_found    INTEGER
+            dates_found      INTEGER
         )
     """)
     con.execute("""
-        CREATE TABLE IF NOT EXISTS persons (
-            id                INTEGER PRIMARY KEY AUTOINCREMENT,
-            extraction_run_id INTEGER NOT NULL,
-            transcription_id  INTEGER,
-            pdf_file          TEXT NOT NULL,
-            page              INTEGER NOT NULL,
-            first_name        TEXT,
-            last_name         TEXT,
-            middle_name       TEXT,
-            middle_initial    TEXT,
-            prefix            TEXT,
-            suffix            TEXT,
-            title             TEXT,
-            context           TEXT,
-            reference         TEXT
+        CREATE TABLE IF NOT EXISTS dates (
+            id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+            date_extraction_run_id INTEGER NOT NULL,
+            transcription_id       INTEGER,
+            pdf_file               TEXT NOT NULL,
+            page                   INTEGER NOT NULL,
+            month                  TEXT,
+            day                    TEXT,
+            year                   TEXT,
+            date_type              TEXT,
+            context                TEXT,
+            reference              TEXT
         )
     """)
     con.commit()
@@ -91,7 +85,7 @@ def init_db():
 
 def already_extracted(con, pdf_file: str, page: int) -> bool:
     row = con.execute(
-        "SELECT id FROM extraction_runs WHERE pdf_file = ? AND page = ?",
+        "SELECT id FROM date_extraction_runs WHERE pdf_file = ? AND page = ?",
         (pdf_file, page)
     ).fetchone()
     return row is not None
@@ -120,13 +114,13 @@ def calc_cost(model: str, input_tokens: int, output_tokens: int) -> float:
 # Extraction
 # ---------------------------------------------------------------------------
 
-async def extract_persons_from_page(sem, lock, transcription_id: int, pdf_file: str,
-                                     page: int, text: str, model: str,
-                                     con: sqlite3.Connection) -> tuple[int, list[Person], float]:
+async def extract_dates_from_page(sem, lock, transcription_id: int, pdf_file: str,
+                                   page: int, text: str, model: str,
+                                   con: sqlite3.Connection) -> tuple[int, list[EventDate], float]:
     async with sem:
-        print(f"  Extracting persons: {Path(pdf_file).name} page {page}...", flush=True)
+        print(f"  Extracting dates: {Path(pdf_file).name} page {page}...", flush=True)
 
-        persons = []
+        dates = []
         in_tok = out_tok = 0
         for attempt in range(3):
             try:
@@ -136,11 +130,11 @@ async def extract_persons_from_page(sem, lock, transcription_id: int, pdf_file: 
                         {"role": "system", "content": SYSTEM_PROMPT},
                         {"role": "user",   "content": text},
                     ],
-                    response_format=PersonList,
+                    response_format=DateList,
                 )
                 in_tok  = completion.usage.prompt_tokens
                 out_tok = completion.usage.completion_tokens
-                persons = completion.choices[0].message.parsed.persons
+                dates   = completion.choices[0].message.parsed.dates
                 break
             except LengthFinishReasonError as e:
                 print(f"    {Path(pdf_file).name} page {page} — output too long, skipping.", flush=True)
@@ -159,33 +153,31 @@ async def extract_persons_from_page(sem, lock, transcription_id: int, pdf_file: 
 
         async with lock:
             run_cur = con.execute("""
-                INSERT INTO extraction_runs
+                INSERT INTO date_extraction_runs
                     (created_at, transcription_id, pdf_file, page, model,
-                     input_tokens, output_tokens, cost_usd, persons_found)
+                     input_tokens, output_tokens, cost_usd, dates_found)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 datetime.utcnow().isoformat(),
                 transcription_id, pdf_file, page, model,
-                in_tok, out_tok, cost, len(persons),
+                in_tok, out_tok, cost, len(dates),
             ))
             run_id = run_cur.lastrowid
 
-            for p in persons:
+            for d in dates:
                 con.execute("""
-                    INSERT INTO persons
-                        (extraction_run_id, transcription_id, pdf_file, page,
-                         first_name, last_name, middle_name, middle_initial,
-                         prefix, suffix, title, context, reference)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO dates
+                        (date_extraction_run_id, transcription_id, pdf_file, page,
+                         month, day, year, date_type, context, reference)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     run_id, transcription_id, pdf_file, page,
-                    p.first_name, p.last_name, p.middle_name, p.middle_initial,
-                    p.prefix, p.suffix, p.title, p.context, p.reference,
+                    d.month, d.day, d.year, d.date_type, d.context, d.reference,
                 ))
             con.commit()
 
-        print(f"    {Path(pdf_file).name} page {page} — {len(persons)} person(s) | {in_tok:,} in / {out_tok:,} out | ${cost:.6f}", flush=True)
-        return page, persons, cost
+        print(f"    {Path(pdf_file).name} page {page} — {len(dates)} date(s) | {in_tok:,} in / {out_tok:,} out | ${cost:.6f}", flush=True)
+        return page, dates, cost
 
 
 async def run_extraction_async(pdf_file: str | None = None, pages: list[int] | None = None,
@@ -208,24 +200,24 @@ async def run_extraction_async(pdf_file: str | None = None, pages: list[int] | N
         con.close()
         return
 
-    print(f"Running person extraction on {len(todo)} page(s) with {model} ({BATCH_SIZE} concurrent)...\n")
+    print(f"Running date extraction on {len(todo)} page(s) with {model} ({BATCH_SIZE} concurrent)...\n")
 
     sem  = asyncio.Semaphore(BATCH_SIZE)
     lock = asyncio.Lock()
 
     tasks = [
-        extract_persons_from_page(sem, lock, tid, pf, pg, text, model, con)
+        extract_dates_from_page(sem, lock, tid, pf, pg, text, model, con)
         for tid, pf, pg, text in todo
     ]
     results = await asyncio.gather(*tasks)
 
     con.close()
 
-    total_persons = sum(len(persons) for _, persons, _ in results)
-    total_cost    = sum(cost for _, _, cost in results)
+    total_dates = sum(len(dates) for _, dates, _ in results)
+    total_cost  = sum(cost for _, _, cost in results)
 
     print(f"\n{'─'*50}")
-    print(f"TOTALS: {total_persons} persons | ${total_cost:.6f}")
+    print(f"TOTALS: {total_dates} dates | ${total_cost:.6f}")
     print(f"{'─'*50}")
 
 

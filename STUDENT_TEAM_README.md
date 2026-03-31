@@ -10,23 +10,39 @@ Each pension file belongs to one soldier and can contain dozens to hundreds of p
 
 ## What You Have Been Given
 
-### 1. PDF Files (`/pdfs`)
-The original 7 pension files used in this sample dataset:
+### 1. PDF Files
+The dataset has expanded from the original 7 files to **20 pension files** totaling **2,330 pages**:
 
 | File | Pages |
 |---|---|
 | Abbs Wilkins.pdf | 77 |
 | Barnwell Paul Civil War Pension.pdf | 79 |
+| Brown (John) Mustifer Civil War Pension.pdf | 191 |
+| Brown Adam Civil War Pension.pdf | 37 |
 | Brown Frederick Civil War Pension.pdf | 70 |
+| Brown George.pdf | 11 |
+| Brown Harry Civil War Pension.pdf | 220 |
 | Brown Isaiah Civil War Pension.pdf | 174 |
+| Cuthbert Sampson Civil War Pension.pdf | 131 |
+| Dulaney Jacob (Jones) Civil War Pension.pdf | 75 |
+| Fields Daniel Civil War Pension.pdf | 70 |
+| Fripp Alfred Civil War Pension.pdf | 182 |
+| Goodwin Robert Civil War Pension.pdf | 354 |
 | Green Moses Civil War Pension.pdf | 113 |
+| Jenkins July Civil War Pension.pdf | 137 |
 | Jones Jacob Civil War Pension.pdf | 66 |
+| Jones William Civil War Pension.pdf | 95 |
+| Legare Murray Civil War Pension.pdf | 62 |
 | Legaree Benjamin (aka Williams Ben) Civil War Pension.pdf | 160 |
+| Robinson, Lucius.pdf | 26 |
 
-### 2. Transcription Files (`/transcriptions`)
+### 2. Page Images (`/images`)
+Every page of every PDF has been converted to a JPEG image at 200 DPI. Files are named `{SoldierName}_page{N}.jpg`. These are the actual images sent to the AI for transcription and can be used to verify transcription accuracy or inspect the original document.
+
+### 3. Transcription Files (`/transcriptions`)
 Each page of each PDF has been transcribed to a plain text file using Google Gemini AI. The transcriptions are 1:1 representations of the original document text, including handwritten content. Files are named `{SoldierName}_page{N}.txt`.
 
-### 3. Database (`transcriber_db.db`)
+### 4. Database (`transcriber_db.db`)
 A SQLite database containing all structured data. See schema below.
 
 ---
@@ -69,6 +85,8 @@ The fact that names from one pension file match the filenames of other pension f
 ---
 
 ## Database Schema
+
+In addition to persons, the database now includes extracted **locations** and **dates** from every page. Each data type has its own runs table (one row per page processed) and a records table (one row per item found).
 
 ### `transcriptions`
 One row per transcribed page.
@@ -123,9 +141,41 @@ One row per person mentioned on a page. **This is the primary table for your wor
 | `context` | Brief description of who this person is in the document |
 | `reference` | The exact sentence from the document where this person appears |
 
-**Total persons extracted: 2,914 across 7 files.**
+**Total persons extracted: 8,949 across 20 files.**
 
 > **Tip:** The `transcriptions` table contains the full transcribed text for every page in the `result` column. If you want to read the original document text for a given person record, join `persons` to `transcriptions` via `transcription_id`.
+
+---
+
+### `location_extraction_runs` / `locations`
+
+One row in `location_extraction_runs` per page processed. One row in `locations` per location found. **6,489 locations extracted across 20 files.**
+
+| Column | Description |
+|---|---|
+| `place_name` | The location name as written in the document |
+| `type` | Classification: city, town, village, county, state, territory, country, plantation, military_post, battlefield, church, cemetery, street, neighborhood, region, other |
+| `city` | City or town name, or `--` |
+| `county` | County name, or `--` |
+| `state` | State or territory name, or `--` |
+| `country` | Country name, or `--` |
+| `context` | Brief note on how this location appears (e.g. "soldier's birthplace", "plantation where soldier was enslaved") |
+| `reference` | The exact sentence where the location was found |
+
+---
+
+### `date_extraction_runs` / `dates`
+
+One row in `date_extraction_runs` per page processed. One row in `dates` per date found. **7,655 dates extracted across 20 files.**
+
+| Column | Description |
+|---|---|
+| `month` | Month as a number 1–12, or `--` |
+| `day` | Day of month as a number, or `--` |
+| `year` | Four-digit year, or `--` |
+| `date_type` | Classification: birth, death, enlistment, muster_in, muster_out, discharge, marriage, pension_filed, examination, deposition, wound, capture, event, document_date, other |
+| `context` | Brief note on what this date refers to (e.g. "soldier's date of birth", "date of pension examination") |
+| `reference` | The exact sentence where the date was found |
 
 ---
 
