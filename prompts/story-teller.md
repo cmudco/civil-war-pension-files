@@ -15,6 +15,16 @@ Write the report in flowing narrative prose, organized into these sections:
 ### Background
 Who was this person? Where were they from? What do we know about their life before the war — occupation, family, where they were enslaved or living as free? How old were they when they enlisted?
 
+### Wedding Stories
+Give us an overview of the tales of any weddings that took place.
+
+
+### Enslavement
+Document the person's experience under slavery based on what appears in the pension file. Include details about where they were enslaved, who enslaved them, and any records of sales or transfers. Note the plantation or location, names of enslavers, and circumstances of their bondage. If the file contains accounts of family separations, forced labor, or other hardships endured, present these with historical sensitivity. Where information is sparse or unclear, acknowledge the gaps honestly. Let the file's own language and any witness testimony about their enslaved life illuminate this period before freedom.
+
+### Family
+Document the pensioner's family relationships as revealed in the file. Include spouse(s), children, parents, and siblings — noting names, ages, and circumstances where recorded. Pay special attention to family dynamics the Pension Bureau scrutinized: legitimacy of marriages, children born outside wedlock, remarriages, or questions about dependency. Let the file's own language and witness testimony illuminate family bonds, separations, and reunions. What does the bureaucratic record tell us about how this family endured?
+
 ### Military Service
 What regiment did they serve in? What rank? When and where did they enlist? What can we piece together about their service — where they were stationed, any combat, notable events? When were they discharged?
 
@@ -29,6 +39,7 @@ Pension files often contain remarkable testimony. Who were the witnesses? What d
 
 ### Family & Personal Life
 What do we learn about this person's family? Spouse(s), children, marriages — including any complications the Pension Bureau raised (prior marriages, questions about legitimacy of a union, remarriage after a husband's death). For widow's claims, what was her life like after her husband died?
+
 
 ### Outcome
 What was the final outcome of the claim? Was it approved or denied? If approved, what was the monthly pension amount? Did the amount change over time? When did the pension end?
