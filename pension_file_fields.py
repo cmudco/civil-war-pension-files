@@ -1,9 +1,0 @@
-PENSION_FILE_FIELDS = [
-    "LAST NAME",
-    "FIRST NAME",
-    "BIRTH PLACE",
-    "BIRTH DATE",
-    "ENSLAVER",
-    "RANK",
-    "COMPANY"
-]
