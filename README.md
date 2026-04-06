@@ -14,6 +14,7 @@ Digitization and analysis pipeline for USCT (United States Colored Troops) Civil
 | Extraction (persons, dates, locations) | OpenAI (`gpt-4o-mini`) |
 | Story generation | Gemini + OpenAI (`gpt-5.4`) + Anthropic (`claude-opus-4-6`) |
 | Storage | SQLite (`transcriber_db.db`) |
+| File storage | AWS S3 + CloudFront CDN |
 | PDF rendering | `pdf2image` + Poppler |
 
 ---
@@ -45,7 +46,16 @@ WEAVIATE_URL=
 WEAVIATE_GRPC_URL=
 WEAVIATE_KEY=
 POPPLER_PATH=          # Windows only — path to poppler/bin
+
+# AWS S3 + CloudFront
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=
+AWS_REGION=us-east-1
+S3_BUCKET_NAME=
+CLOUDFRONT_BASE_URL=   # e.g. https://d1abc123xyz.cloudfront.net
 ```
+
+See `.env.example` for a full template.
 
 ---
 
@@ -74,14 +84,14 @@ PDFs
  |
  | 01_transcriber.py
  v
-transcriber_db.db  (transcriptions table)  +  transcriptions/*.txt  +  images/*.jpg
+S3 (images + transcriptions)  +  transcriber_db.db  (transcriptions table with S3 URLs)
  |
  | 02_transcriber_ingest.py
  v
 Weaviate vector DB  (CivilWarPensionPage collection)
  |
- | 03_transcriber_extraction.py          -- persons
- | 03_transcriber_extraction_dates.py    -- dates
+ | 03_transcriber_extraction.py           -- persons
+ | 03_transcriber_extraction_dates.py     -- dates
  | 03_transcriber_extraction_locations.py -- locations
  v
 transcriber_db.db  (persons, dates, locations tables)
@@ -91,25 +101,24 @@ transcriber_db.db  (persons, dates, locations tables)
 Console report — ranked list of unprocessed PDFs whose soldiers
 appear in already-extracted person records, used to select next batch
  |
- | XX_story_teller.py
+ | 99_story_teller.py
  v
-stories/{SoldierName}/
-    gemini.md
-    openai.md
-    anthropic.md
+S3 (stories/{SoldierName}/gemini.md, openai.md, anthropic.md)
++ transcriber_db.db  (stories table with S3 URLs)
 ```
 
 ### Script reference
 
 | Script | What it does |
 |---|---|
-| `01_transcriber.py` | Converts PDF pages to JPEG, sends to Gemini for transcription, logs to DB. **To add new files**, update the `files` list at the bottom of the script — each entry is a tuple of `(relative_pdf_path, pages_or_None)`, where `None` processes all pages. Example: `("usct_pension_files/A_B/Smith John.pdf", None)` |
+| `01_transcriber.py` | Converts PDF pages to JPEG, uploads images and transcription text directly to S3, logs CloudFront URLs to DB. **To add new files**, update the `files` list at the bottom of the script — each entry is a tuple of `(relative_pdf_path, pages_or_None)`, where `None` processes all pages. Example: `("usct_pension_files/A_B/Smith John.pdf", None)` |
 | `02_transcriber_ingest.py` | Embeds transcriptions and ingests chunks into Weaviate |
 | `03_transcriber_extraction.py` | Extracts structured person records from transcriptions via OpenAI |
 | `03_transcriber_extraction_dates.py` | Extracts structured date records |
 | `03_transcriber_extraction_locations.py` | Extracts structured location records |
 | `04_name_matcher.py` | Matches extracted person names against unprocessed PDF filenames to find next targets |
-| `XX_story_teller.py` | Generates a full narrative story report for every transcribed file using all three AI providers.  Note  this costs $.01-$.75+ per transcription so please be careful running this!!!  It was meant for testing and not meant for scale.  A DEFAULT_BATCH_LIMIT has been set so you by default will run no more than 3. |
+| `99_story_teller.py` | Generates a full narrative story report for every transcribed file using all three AI providers, uploads each to S3, and logs to the `stories` table. Note this costs $.01-$.75+ per file so please be careful running this. A `DEFAULT_BATCH_LIMIT` of 3 is set by default. |
+| `99_migrate_to_s3.py` | One-off migration script that uploads existing local images, transcriptions, and stories to S3 and records CloudFront URLs in the DB. Supports `--dry-run` and `--limit N`. Safe to re-run (idempotent). |
 
 ---
 
@@ -153,8 +162,28 @@ One row per transcribed page.
 | `input_tokens` | INTEGER | |
 | `output_tokens` | INTEGER | |
 | `cost_usd` | REAL | |
-| `txt_file` | TEXT | Path to exported `.txt` |
+| `txt_file` | TEXT | Legacy local path (no longer populated) |
 | `result` | TEXT | Full transcribed text |
+| `s3_image_key` | TEXT | S3 object key for the page image |
+| `s3_image_url` | TEXT | CloudFront URL for the page image |
+| `s3_txt_key` | TEXT | S3 object key for the transcription text |
+| `s3_txt_url` | TEXT | CloudFront URL for the transcription text |
+| `zooniverse_subject_id` | TEXT | Zooniverse subject ID once uploaded |
+| `verified_transcription` | TEXT | Human-verified transcription from Zooniverse |
+| `verified_at` | TEXT | Timestamp of verification |
+
+### `stories`
+One row per generated story (three per soldier — one per AI model).
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | INTEGER | Primary key |
+| `created_at` | TEXT | Timestamp |
+| `pdf_stem` | TEXT | Soldier name stem (e.g. `Abrams_Henry`) |
+| `model` | TEXT | `gemini`, `openai`, or `anthropic` |
+| `s3_key` | TEXT | S3 object key |
+| `s3_url` | TEXT | CloudFront URL |
+| `content` | TEXT | Full story markdown |
 
 ### `extraction_runs`
 One row per page processed for person extraction.
@@ -217,6 +246,39 @@ One row in `location_extraction_runs` per page. One row in `locations` per locat
 | `country` | TEXT | or `--` |
 | `context` | TEXT | How this location appears |
 | `reference` | TEXT | Exact sentence |
+
+---
+
+## S3 / CloudFront Storage
+
+All images, transcription text files, and stories are stored in AWS S3 and served via a CloudFront CDN distribution. Nothing is written to local disk by the pipeline.
+
+### S3 bucket structure
+
+```
+usct-pension-files/
+├── images/
+│   └── {SoldierName}/
+│       └── {SoldierName}-{page:03d}.jpg     e.g. Abrams_Henry/Abrams_Henry-001.jpg
+├── transcriptions/
+│   └── {SoldierName}/
+│       └── {SoldierName}-{page:03d}.txt
+└── stories/
+    └── {SoldierName}/
+        ├── gemini.md
+        ├── openai.md
+        └── anthropic.md
+```
+
+### Public URLs
+
+All files are publicly accessible via CloudFront HTTPS. The base URL is stored in `CLOUDFRONT_BASE_URL` in your `.env`. Example:
+
+```
+https://d49k6q6w27fis.cloudfront.net/images/Abrams_Henry/Abrams_Henry-001.jpg
+```
+
+CloudFront URLs are stored in the `transcriptions` and `stories` tables and are the source of truth for Zooniverse image references.
 
 ---
 
