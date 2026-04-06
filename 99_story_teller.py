@@ -17,13 +17,15 @@ Usage:
 """
 
 import asyncio
+import io
 import os
 import sqlite3
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import anthropic
+import boto3
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
@@ -36,8 +38,20 @@ load_dotenv()
 # ---------------------------------------------------------------------------
 
 DB_FILE     = "transcriber_db.db"
-STORIES_DIR = Path("stories")
 PROMPT_FILE = Path(__file__).parent / "prompts" / "story-teller.md"
+
+S3_BUCKET = os.getenv("S3_BUCKET_NAME", "")
+_CF_BASE  = (os.getenv("CLOUDFRONT_BASE_URL") or "").rstrip("/")
+s3_client = boto3.client(
+    "s3",
+    aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+    aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+    region_name=os.getenv("AWS_REGION", "us-east-1"),
+)
+
+
+def cf_url(key: str) -> str:
+    return f"{_CF_BASE}/{key}"
 
 GEMINI_MODEL    = "gemini-3.1-pro-preview"
 OPENAI_MODEL    = "gpt-5.4"
@@ -94,17 +108,23 @@ def build_document(rows: list[dict]) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Output path
+# Output helpers
 # ---------------------------------------------------------------------------
 
-def story_folder(pdf_file: str) -> Path:
-    stem = Path(pdf_file).stem.replace(" ", "_")
-    return STORIES_DIR / stem
+def pdf_stem(pdf_file: str) -> str:
+    return Path(pdf_file).stem.replace(" ", "_")
 
 
 def already_done(pdf_file: str) -> bool:
-    folder = story_folder(pdf_file)
-    return all((folder / f"{key}.md").exists() for key, _ in MODELS)
+    """Check if all three model stories are already in the DB/S3."""
+    stem = pdf_stem(pdf_file)
+    con = sqlite3.connect(DB_FILE)
+    count = con.execute(
+        "SELECT COUNT(*) FROM stories WHERE pdf_stem = ? AND s3_url IS NOT NULL",
+        (stem,)
+    ).fetchone()[0]
+    con.close()
+    return count >= len(MODELS)
 
 
 # ---------------------------------------------------------------------------
@@ -176,21 +196,36 @@ CALLERS = {
 # ---------------------------------------------------------------------------
 
 def save_story(pdf_file: str, model_key: str, model_name: str,
-               text: str, in_tok: int, out_tok: int, cost: float) -> Path:
-    folder = story_folder(pdf_file)
-    folder.mkdir(parents=True, exist_ok=True)
-    out_path = folder / f"{model_key}.md"
+               text: str, in_tok: int, out_tok: int, cost: float) -> str:
+    """Upload story to S3, log to stories table. Returns CloudFront URL."""
+    stem = pdf_stem(pdf_file)
+    key  = f"stories/{stem}/{model_key}.md"
 
     header = (
         f"# {Path(pdf_file).stem}\n\n"
         f"**Model:** `{model_name}`  \n"
-        f"**Generated:** {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}  \n"
+        f"**Generated:** {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}  \n"
         f"**Tokens:** {in_tok:,} in / {out_tok:,} out  \n"
         f"**Cost:** ${cost:.4f}  \n\n"
         f"---\n\n"
     )
-    out_path.write_text(header + (text or ""), encoding="utf-8")
-    return out_path
+    content = header + (text or "")
+    data = content.encode("utf-8")
+    s3_client.upload_fileobj(
+        io.BytesIO(data), S3_BUCKET, key,
+        ExtraArgs={"ContentType": "text/markdown; charset=utf-8"},
+    )
+    url = cf_url(key)
+
+    con = sqlite3.connect(DB_FILE)
+    con.execute("""
+        INSERT INTO stories (created_at, pdf_stem, model, s3_key, s3_url, content)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (datetime.now(timezone.utc).isoformat(), stem, model_key, key, url, content))
+    con.commit()
+    con.close()
+
+    return url
 
 
 # ---------------------------------------------------------------------------
@@ -223,8 +258,8 @@ async def generate_stories_for_file(pdf_file: str, system_prompt: str,
         text, in_tok, out_tok = result
         cost = calc_cost(model_key, in_tok, out_tok)
         file_cost += cost
-        path = save_story(pdf_file, model_key, model_name, text, in_tok, out_tok, cost)
-        print(f"  [{model_key}] {in_tok:,} in / {out_tok:,} out | ${cost:.4f} -> {path}")
+        url = save_story(pdf_file, model_key, model_name, text, in_tok, out_tok, cost)
+        print(f"  [{model_key}] {in_tok:,} in / {out_tok:,} out | ${cost:.4f} -> {url}")
 
     return file_cost
 
@@ -298,7 +333,7 @@ async def main():
     print(f"\n{'=' * 50}")
     print(f"Total files processed : {len(todo)}")
     print(f"Total cost            : ${total_cost:.4f}")
-    print(f"Stories saved to      : {STORIES_DIR}/")
+    print(f"Stories uploaded to   : s3://{S3_BUCKET}/stories/")
     print(f"{'=' * 50}")
 
 

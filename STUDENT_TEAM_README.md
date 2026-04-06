@@ -36,11 +36,24 @@ The dataset has expanded from the original 7 files to **20 pension files** total
 | Legaree Benjamin (aka Williams Ben) Civil War Pension.pdf | 160 |
 | Robinson, Lucius.pdf | 26 |
 
-### 2. Page Images (`/images`)
-Every page of every PDF has been converted to a JPEG image at 200 DPI. Files are named `{SoldierName}_page{N}.jpg`. These are the actual images sent to the AI for transcription and can be used to verify transcription accuracy or inspect the original document.
+### 2. Page Images (AWS S3 / CloudFront)
+Every page of every PDF has been converted to a JPEG image at 200 DPI and uploaded to AWS S3, served via CloudFront CDN. The public URL for each image is stored in the `s3_image_url` column of the `transcriptions` table.
 
-### 3. Transcription Files (`/transcriptions`)
-Each page of each PDF has been transcribed to a plain text file using Google Gemini AI. The transcriptions are 1:1 representations of the original document text, including handwritten content. Files are named `{SoldierName}_page{N}.txt`.
+URL pattern:
+```
+https://d49k6q6w27fis.cloudfront.net/images/{SoldierName}/{SoldierName}-{page:03d}.jpg
+```
+Example: `https://d49k6q6w27fis.cloudfront.net/images/Abrams_Henry/Abrams_Henry-001.jpg`
+
+These URLs are directly accessible by Zooniverse for subject display.
+
+### 3. Transcription Files (AWS S3 / CloudFront)
+Each page of each PDF has been transcribed to a plain text file using Google Gemini AI and uploaded to S3. The public URL is stored in `s3_txt_url` in the `transcriptions` table.
+
+URL pattern:
+```
+https://d49k6q6w27fis.cloudfront.net/transcriptions/{SoldierName}/{SoldierName}-{page:03d}.txt
+```
 
 ### 4. Database (`transcriber_db.db`)
 A SQLite database containing all structured data. See schema below.
@@ -103,8 +116,13 @@ One row per transcribed page.
 | `elapsed_seconds` | How long the transcription took |
 | `input_tokens` / `output_tokens` | Token usage |
 | `cost_usd` | Cost of this call |
-| `txt_file` | Path to exported .txt file |
+| `txt_file` | Legacy local path (no longer populated) |
 | `result` | Full transcribed text |
+| `s3_image_url` | CloudFront URL for the page image — use this for Zooniverse subjects |
+| `s3_txt_url` | CloudFront URL for the transcription text file |
+| `zooniverse_subject_id` | Zooniverse subject ID once uploaded |
+| `verified_transcription` | Human-verified transcription from Zooniverse volunteers |
+| `verified_at` | Timestamp of verification |
 
 ### `extraction_runs`
 One row per page that was processed for person extraction.
