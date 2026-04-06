@@ -46,6 +46,10 @@ ANTHROPIC_MODEL = "claude-opus-4-6"
 # Gemini max output: 65,536 | OpenAI: 128,000 | Anthropic: 128,000
 MAX_OUTPUT_TOKENS = 16_384
 
+# Safety cap — max files to process in a single run (applies to not-yet-done files only).
+# Override at runtime with --limit N.
+DEFAULT_BATCH_LIMIT = 3
+
 PRICING = {
     "gemini":    {"input": 2.00,  "output": 12.00},  # <= 200k input tier
     "openai":    {"input": 2.50,  "output": 15.00},
@@ -231,7 +235,13 @@ async def generate_stories_for_file(pdf_file: str, system_prompt: str,
 
 async def main():
     overwrite   = "--overwrite" in sys.argv
-    single_file = next((a for a in sys.argv[1:] if not a.startswith("--")), None)
+    single_file = next((a for a in sys.argv[1:] if not a.startswith("--") and not a.isdigit()), None)
+
+    limit = DEFAULT_BATCH_LIMIT
+    if "--limit" in sys.argv:
+        idx = sys.argv.index("--limit")
+        if idx + 1 < len(sys.argv):
+            limit = int(sys.argv[idx + 1])
 
     system_prompt = PROMPT_FILE.read_text(encoding="utf-8")
 
@@ -249,7 +259,28 @@ async def main():
     else:
         todo = files
 
-    print(f"Files to process: {len(todo)}")
+    # Apply batch limit (single-file runs are exempt)
+    if not single_file and len(todo) > limit:
+        print(f"Capping to {limit} of {len(todo)} remaining file(s). Use --limit N to change.")
+        todo = todo[:limit]
+
+    if not todo:
+        print("Nothing to process.")
+        return
+
+    # Cost warning — roughly $0.01–$0.75 per file across all three models
+    est_low  = len(todo) * 0.01
+    est_high = len(todo) * 0.75
+    print(f"\n{'=' * 50}")
+    print(f"  Files to process : {len(todo)}")
+    print(f"  Estimated cost   : ${est_low:.2f} – ${est_high:.2f}  (all 3 models)")
+    print(f"  WARNING: This script is intended for single-file or small-batch use.")
+    print(f"           Running at scale can be expensive.")
+    print(f"{'=' * 50}")
+    answer = input("\nProceed? [y/N] ").strip().lower()
+    if answer != "y":
+        print("Aborted.")
+        return
 
     sem        = asyncio.Semaphore(2)
     total_cost = 0.0

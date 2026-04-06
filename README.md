@@ -109,7 +109,7 @@ stories/{SoldierName}/
 | `03_transcriber_extraction_dates.py` | Extracts structured date records |
 | `03_transcriber_extraction_locations.py` | Extracts structured location records |
 | `04_name_matcher.py` | Matches extracted person names against unprocessed PDF filenames to find next targets |
-| `XX_story_teller.py` | Generates a full narrative story report for every transcribed file using all three AI providers |
+| `XX_story_teller.py` | Generates a full narrative story report for every transcribed file using all three AI providers.  Note  this costs $.01-$.75+ per transcription so please be careful running this!!!  It was meant for testing and not meant for scale.  A DEFAULT_BATCH_LIMIT has been set so you by default will run no more than 3. |
 
 ---
 
