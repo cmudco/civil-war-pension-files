@@ -12,3 +12,4 @@ google-generativeai>=0.8.6,<1.0.0
 weaviate-client>=4.20.4,<5.0.0
 google-genai>=1.57.0,<2.0.0
 anthropic>=0.75.0,<1.0.0
+boto3>=1.35.0,<2.0.0
