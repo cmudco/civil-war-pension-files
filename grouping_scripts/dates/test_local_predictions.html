@@ -1,0 +1,73 @@
+<html><head><title>Local Dates Audit Report</title>
+<style>
+body { font-family: 'Segoe UI', system-ui, sans-serif; background: #1a1a2e; color: #e0e0e0; padding: 24px; }
+h1 { color: #a8b2d1; font-size: 24px; margin-bottom: 4px; }
+.stats-box { background: #2d2d44; padding: 16px; border-radius: 8px; margin-bottom: 24px; display: inline-block; border-left: 4px solid #64ffda; }
+.stat-row { margin-bottom: 8px; font-size: 15px; }
+.number { color: #64ffda; font-weight: bold; font-size: 16px; }
+table { border-collapse: collapse; width: 100%; margin-bottom: 16px; font-size: 13px; }
+th { background: #2d2d44; color: #a8b2d1; padding: 8px 12px; text-align: left; font-weight: 600; }
+td { padding: 8px 12px; border-bottom: 1px solid #2d2d44; }
+tr:hover { background: #2d2d44; }
+</style></head><body>
+<h1>Local Dates Deduplication Report</h1>
+<div class='stats-box'>
+<div class='stat-row'>Total Raw Dates Loaded: <span class='number'>14,646</span></div>
+<div class='stat-row'>Complete Dates (Y/M/D present): <span class='number'>11,352</span></div>
+<div class='stat-row'>Partial Dates (Forced Singletons): <span class='number'>3,294</span></div>
+<div class='stat-row' style='margin-top: 12px; padding-top: 12px; border-top: 1px solid #4a4a6a;'>Complete Dates merged down to: <span class='number'>6,525 clusters</span></div>
+</div>
+<h2>Top 50 Largest Exact Date Clusters (Per-File)</h2>
+<table><tr><th>Count</th><th>PDF File</th><th>Year</th><th>Month</th><th>Day</th></tr>
+<tr><td>37</td><td>usct_pension_files\G_H\Goodwin Robert CIvil War Pension.pdf</td><td>1890</td><td>6</td><td>27</td></tr>
+<tr><td>36</td><td>usct_pension_files\G_H\Goodwin Robert CIvil War Pension.pdf</td><td>1866</td><td>1</td><td>31</td></tr>
+<tr><td>29</td><td>usct_pension_files\G_H\Goodwin Robert CIvil War Pension.pdf</td><td>1863</td><td>3</td><td>21</td></tr>
+<tr><td>28</td><td>usct_pension_files\I_J\Jackson William Civil War Pension (1).pdf</td><td>1866</td><td>1</td><td>31</td></tr>
+<tr><td>26</td><td>usct_pension_files\A_B\Bailey (Colonel) Anthony Civil War Pension.pdf</td><td>1866</td><td>2</td><td>28</td></tr>
+<tr><td>25</td><td>usct_pension_files\I_J\Jenkins Cain Civil War Pension Compressed.pdf</td><td>1911</td><td>8</td><td>15</td></tr>
+<tr><td>24</td><td>usct_pension_files\A_B\Bailey (Colonel) Anthony Civil War Pension.pdf</td><td>1863</td><td>5</td><td>21</td></tr>
+<tr><td>23</td><td>usct_pension_files\I_J\Jenkins Cain Civil War Pension Compressed.pdf</td><td>1866</td><td>2</td><td>28</td></tr>
+<tr><td>23</td><td>usct_pension_files\E_F\Fields Paul Civil War Pension.pdf</td><td>1866</td><td>4</td><td>25</td></tr>
+<tr><td>23</td><td>usct_pension_files\E_F\Fields Paul Civil War Pension.pdf</td><td>1864</td><td>11</td><td>26</td></tr>
+<tr><td>19</td><td>usct_pension_files\A_B\Brown Isaiah Civil War Pension.pdf</td><td>1866</td><td>1</td><td>31</td></tr>
+<tr><td>19</td><td>usct_pension_files\A_B\Bailey (Colonel) Anthony Civil War Pension.pdf</td><td>1890</td><td>6</td><td>27</td></tr>
+<tr><td>18</td><td>usct_pension_files\I_J\Jackson William Civil War Pension (1).pdf</td><td>1890</td><td>6</td><td>27</td></tr>
+<tr><td>16</td><td>usct_pension_files\I_J\Jackson William Civil War Pension (1).pdf</td><td>1862</td><td>10</td><td>19</td></tr>
+<tr><td>16</td><td>usct_pension_files\E_F\Fields Daniel Civil War Pension.pdf</td><td>1866</td><td>1</td><td>31</td></tr>
+<tr><td>16</td><td>usct_pension_files\E_F\Fields, Adam Civil War Pension.pdf</td><td>1865</td><td>4</td><td>25</td></tr>
+<tr><td>16</td><td>usct_pension_files\E_F\Fields, Adam Civil War Pension.pdf</td><td>1912</td><td>5</td><td>11</td></tr>
+<tr><td>16</td><td>usct_pension_files\C_D\Cuthbert Sampson Civil War Pension.pdf</td><td>1866</td><td>1</td><td>31</td></tr>
+<tr><td>15</td><td>usct_pension_files\E_F\Fripp Alfred Civil War Pension.pdf</td><td>1909</td><td>12</td><td>2</td></tr>
+<tr><td>15</td><td>usct_pension_files\A_B\Brown Harry Civil War Pension.pdf</td><td>1920</td><td>6</td><td>10</td></tr>
+<tr><td>15</td><td>usct_pension_files\E_F\Fields, Adam Civil War Pension.pdf</td><td>1863</td><td>4</td><td>22</td></tr>
+<tr><td>14</td><td>usct_pension_files\K_L\Legaree Benjamin (aka Williams Ben) Civil War Pension.pdf</td><td>1916</td><td>9</td><td>21</td></tr>
+<tr><td>14</td><td>usct_pension_files\A_B\Brown Harry Civil War Pension.pdf</td><td>1866</td><td>2</td><td>28</td></tr>
+<tr><td>14</td><td>usct_pension_files\A_B\Brown Isaiah Civil War Pension.pdf</td><td>1890</td><td>6</td><td>27</td></tr>
+<tr><td>14</td><td>usct_pension_files\A_B\Abbs Wilkins.pdf</td><td>1866</td><td>5</td><td>20</td></tr>
+<tr><td>13</td><td>usct_pension_files\I_J\Jackson William Civil War Pension (1).pdf</td><td>1906</td><td>1</td><td>23</td></tr>
+<tr><td>13</td><td>usct_pension_files\I_J\Jenkins July Civil War Pension.pdf</td><td>1866</td><td>1</td><td>31</td></tr>
+<tr><td>13</td><td>usct_pension_files\I_J\Jenkins July Civil War Pension.pdf</td><td>1891</td><td>4</td><td>13</td></tr>
+<tr><td>13</td><td>usct_pension_files\I_J\Jenkins Cain Civil War Pension Compressed.pdf</td><td>1907</td><td>2</td><td>6</td></tr>
+<tr><td>13</td><td>usct_pension_files\A_B\Brown Isaiah Civil War Pension.pdf</td><td>1862</td><td>11</td><td>1</td></tr>
+<tr><td>13</td><td>usct_pension_files\I_J\Jenkins Cain Civil War Pension Compressed.pdf</td><td>1911</td><td>11</td><td>7</td></tr>
+<tr><td>13</td><td>usct_pension_files\I_J\Jackson William Civil War Pension (1).pdf</td><td>1886</td><td>4</td><td>22</td></tr>
+<tr><td>13</td><td>usct_pension_files\E_F\Fripp Alfred Civil War Pension.pdf</td><td>1905</td><td>6</td><td>9</td></tr>
+<tr><td>12</td><td>usct_pension_files\I_J\Jones Jacob Civil War Pension.pdf</td><td>1896</td><td>12</td><td>26</td></tr>
+<tr><td>12</td><td>usct_pension_files\A_B\Barnwell Paul Civil War Pension.pdf</td><td>1890</td><td>6</td><td>27</td></tr>
+<tr><td>12</td><td>usct_pension_files\A_B\Barnwell Paul Civil War Pension.pdf</td><td>1866</td><td>1</td><td>31</td></tr>
+<tr><td>12</td><td>usct_pension_files\A_B\Billups Peter Civil War Pension.pdf</td><td>1892</td><td>5</td><td>5</td></tr>
+<tr><td>12</td><td>usct_pension_files\I_J\Jenkins Cain Civil War Pension Compressed.pdf</td><td>1863</td><td>3</td><td>20</td></tr>
+<tr><td>12</td><td>usct_pension_files\C_D\Cuthbert Sampson Civil War Pension.pdf</td><td>1890</td><td>6</td><td>27</td></tr>
+<tr><td>12</td><td>usct_pension_files\I_J\Jenkins Cain Civil War Pension Compressed.pdf</td><td>1890</td><td>6</td><td>27</td></tr>
+<tr><td>12</td><td>usct_pension_files\I_J\Jenkins Cain Civil War Pension Compressed.pdf</td><td>1912</td><td>8</td><td>30</td></tr>
+<tr><td>12</td><td>usct_pension_files\E_F\Ford Wally Civil War Pension.pdf</td><td>1910</td><td>10</td><td>8</td></tr>
+<tr><td>12</td><td>usct_pension_files\E_F\Ford Wally Civil War Pension.pdf</td><td>1910</td><td>10</td><td>7</td></tr>
+<tr><td>11</td><td>usct_pension_files\C_D\Cuthbert Sampson Civil War Pension.pdf</td><td>1862</td><td>10</td><td>19</td></tr>
+<tr><td>11</td><td>usct_pension_files\I_J\Jenkins Cain Civil War Pension Compressed.pdf</td><td>1882</td><td>3</td><td>2</td></tr>
+<tr><td>11</td><td>usct_pension_files\I_J\Jenkins Cain Civil War Pension Compressed.pdf</td><td>1911</td><td>8</td><td>25</td></tr>
+<tr><td>11</td><td>usct_pension_files\A_B\Brown Frederick Civil War Pension.pdf</td><td>1890</td><td>6</td><td>27</td></tr>
+<tr><td>11</td><td>usct_pension_files\A_B\Brown Samuel Civil War pension.pdf</td><td>1893</td><td>4</td><td>24</td></tr>
+<tr><td>11</td><td>usct_pension_files\G_H\Goodwin Robert CIvil War Pension.pdf</td><td>1907</td><td>2</td><td>6</td></tr>
+<tr><td>11</td><td>usct_pension_files\C_D\Chase Charles Civil War Pension.pdf</td><td>1890</td><td>6</td><td>27</td></tr>
+</table>
+</body></html>
