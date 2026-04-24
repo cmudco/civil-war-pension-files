@@ -5,6 +5,7 @@ import splink.comparison_library as cl
 import splink.comparison_level_library as cll
 
 from utils.clean_utils import standardize_nulls
+from utils.db_utils import ensure_column
 
 # --- HISTORICAL ABBREVIATION MAP ---
 HISTORICAL_ABBREVS = {
@@ -95,6 +96,10 @@ def clean_and_merge_context(context_series):
 def load_locations_from_db(db_path, custom_where=""):
     """Load and normalize raw location records from the database."""
     print("  [LOAD] Loading raw locations from database...")
+    
+    # Ensure cluster_id exists for consistency
+    ensure_column(db_path, "locations", "cluster_id")
+    
     conn = sqlite3.connect(db_path)
 
     query = f"""

@@ -10,9 +10,7 @@ from locations.locations_utils import (
 )
 from utils.db_utils import update_cluster_ids
 
-# Go up one level from the script to get to 'grouping_scripts', then up one more to get to the main repo
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-# Point directly to where the DB actually lives
 DB_PATH = os.path.join(ROOT_DIR, "transcriber_db.db")
 OUTPUT_DIR = os.path.join(ROOT_DIR, "grouping_scripts", "output")
 
@@ -25,7 +23,6 @@ PLACE_KEY_JW_THRESH_2 = 0.85
 BLOCKING_JW_THRESH = 0.80
 PREDICT_THRESHOLD = 0.70
 CLUSTER_THRESHOLD = 0.70
-
 
 def run_local_locations_dedupe(df, output_filename):
     if df is None or df.empty:

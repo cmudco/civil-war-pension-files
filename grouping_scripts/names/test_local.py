@@ -10,6 +10,7 @@ from names.names_utils import load_persons_from_db, determine_role
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Point directly to where the DB actually lives
 DB_PATH = os.path.join(ROOT_DIR, "transcriber_db.db")
+OUTPUT_DIR = os.path.join(ROOT_DIR, "grouping_scripts", "output")
 
 # --- SPLINK PROBABILITIES & THRESHOLDS ---
 PROB_TWO_RANDOM_RECORDS_MATCH = 0.10
