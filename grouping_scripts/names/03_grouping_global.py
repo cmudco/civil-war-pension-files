@@ -26,11 +26,13 @@ FILE_CLASH_PROB = 0.01
 PREDICT_THRESHOLD = 0.0
 CLUSTER_THRESHOLD = 0.6
 
-
-def run_splink_linkage():
+def run_splink_linkage(master_df=None):
     print("\n[STEP 3] Global Entity Resolution")
     print("=" * 50)
-    master_df = build_master_list(DB_PATH)
+    
+    if master_df is None:
+        master_df = build_master_list(DB_PATH)
+        
     if master_df.empty:
         return
 
