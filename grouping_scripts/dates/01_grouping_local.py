@@ -5,12 +5,9 @@ from dates.dates_utils import load_dates_from_db
 from utils.clean_utils import clean_and_merge_context
 from utils.db_utils import update_cluster_ids
 
-# Go up one level from the script to get to 'grouping_scripts', then up one more to get to the main repo
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-# Point directly to where the DB actually lives
 DB_PATH = os.path.join(ROOT_DIR, "transcriber_db.db")
 OUTPUT_DIR = os.path.join(ROOT_DIR, "grouping_scripts", "output")
-
 
 def run_local_dates_dedupe(df, output_filename):
     if df is None or df.empty:
@@ -75,9 +72,8 @@ def run_local_dates_dedupe(df, output_filename):
 
     return full_results
 
-
 if __name__ == "__main__":
-    print("\n[STEP 2] Local Dates Strict Deduplication")
+    print("\n[STEP 1] Local Dates Strict Deduplication")
     print("=" * 50)
     
     df_dates = load_dates_from_db(DB_PATH)

@@ -12,4 +12,5 @@ usct_pension_files/A_B/Abbs Wilkins.pdf
 /transcriptions
 /stories
 transcriptions
-
+**/__pycache__/
+*.pyc

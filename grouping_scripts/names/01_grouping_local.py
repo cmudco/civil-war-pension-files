@@ -6,9 +6,7 @@ from splink import DuckDBAPI, Linker
 
 from names.names_utils import load_persons_from_db, determine_role, update_database_with_clusters, build_master_list
 
-# Go up one level from the script to get to 'grouping_scripts', then up one more to get to the main repo
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-# Point directly to where the DB actually lives
 DB_PATH = os.path.join(ROOT_DIR, "transcriber_db.db")
 OUTPUT_DIR = os.path.join(ROOT_DIR, "grouping_scripts", "output")
 
@@ -31,7 +29,6 @@ FIREWALL_FIRST_NAME_JW_THRESH = 0.65
 
 PREDICT_THRESHOLD = 0.65
 CLUSTER_THRESHOLD = 0.65
-
 
 def run_person_dedupe(df, output_filename):
     if df is None or df.empty:
@@ -112,7 +109,6 @@ def run_person_dedupe(df, output_filename):
 
     print(f"  [DONE] {len(final_df):,} records -> {output_filename}")
     return final_df
-
 
 if __name__ == "__main__":
     print("\n[STEP 1] Local Name Deduplication")

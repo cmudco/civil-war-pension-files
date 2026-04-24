@@ -2,9 +2,7 @@ import os
 import pandas as pd
 from dates.dates_utils import load_dates_from_db
 
-# Go up one level from the script to get to 'grouping_scripts', then up one more to get to the main repo
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-# Point directly to where the DB actually lives
 DB_PATH = os.path.join(ROOT_DIR, "transcriber_db.db")
 DATES_DIR = os.path.dirname(os.path.abspath(__file__))
 

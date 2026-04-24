@@ -31,6 +31,12 @@ def load_persons_from_db(db_path, custom_where_clause=""):
     """Loads and aggressively normalizes names from the database."""
     # Ensure the column exists so our SQL queries don't crash on a fresh database
     ensure_column(db_path, "persons", "cluster_id")
+    ensure_column(db_path, "persons", "global_cluster_id")
+    ensure_column(db_path, "persons", "gemini_extracted")
+    ensure_column(db_path, "persons", "birth_age")
+    ensure_column(db_path, "persons", "slaveholder_info")
+    ensure_column(db_path, "persons", "marriage_info")
+    ensure_column(db_path, "persons", "family_members")
 
     conn = sqlite3.connect(db_path)
     # We made the WHERE clause dynamic so you can reuse this for any test
@@ -102,6 +108,15 @@ def update_database_with_clusters(df, db_path):
 def build_master_list(db_path):
     """Collapse clustered person rows into canonical master profiles."""
     print("  [LOAD] Building master list from clustered persons...")
+    
+    # Ensure columns exist before we SELECT them
+    ensure_column(db_path, "persons", "cluster_id")
+    ensure_column(db_path, "persons", "global_cluster_id")
+    ensure_column(db_path, "persons", "gemini_extracted")
+    ensure_column(db_path, "persons", "birth_age")
+    ensure_column(db_path, "persons", "slaveholder_info")
+    ensure_column(db_path, "persons", "marriage_info")
+    ensure_column(db_path, "persons", "family_members")
     conn = sqlite3.connect(db_path)
 
     query = """
@@ -153,6 +168,15 @@ def build_master_list(db_path):
 def generate_global_master_csv(db_path, output_csv="GLOBAL_MASTER_EXTRACTED.csv"):
     """Export global identities to a clean summary CSV."""
     print("  [EXPORT] Writing global master CSV...")
+    
+    # Ensure columns exist before we SELECT them
+    ensure_column(db_path, "persons", "global_cluster_id")
+    ensure_column(db_path, "persons", "cluster_id")
+    ensure_column(db_path, "persons", "gemini_extracted")
+    ensure_column(db_path, "persons", "birth_age")
+    ensure_column(db_path, "persons", "slaveholder_info")
+    ensure_column(db_path, "persons", "marriage_info")
+    ensure_column(db_path, "persons", "family_members")
     conn = sqlite3.connect(db_path)
 
     query = """
@@ -198,26 +222,26 @@ def generate_global_master_csv(db_path, output_csv="GLOBAL_MASTER_EXTRACTED.csv"
             return " | ".join(final_vals)
 
         global_records.append({
-            'Global_ID': g_id,
-            'Primary_Name': primary_name,
-            'Aliases': aliases,
-            'Linked_Files_Count': len(unique_files_clean),
-            'Source_Files': " | ".join(unique_files_clean),
-            'Total_Rows_Merged': len(group),
-            'AI_Extracted': 'Yes' if any(group['gemini_extracted'].astype(str).str.strip().isin(['1', '1.0'])) else 'No',
-            'Birth_Age': agg_bio('birth_age'),
-            'Slaveholder_Info': agg_bio('slaveholder_info'),
-            'Marriage_Info': agg_bio('marriage_info'),
-            'Family_Members': agg_bio('family_members')
+            'global_id': g_id,
+            'primary_name': primary_name,
+            'aliases': aliases,
+            'linked_files_count': len(unique_files_clean),
+            'source_files': " | ".join(unique_files_clean),
+            'total_rows_merged': len(group),
+            'ai_extracted': 'Yes' if any(group['gemini_extracted'].astype(str).str.strip().isin(['1', '1.0'])) else 'No',
+            'birth_age': agg_bio('birth_age'),
+            'slaveholder_info': agg_bio('slaveholder_info'),
+            'marriage_info': agg_bio('marriage_info'),
+            'family_members': agg_bio('family_members')
         })
 
     global_df = pd.DataFrame(global_records)
 
     # Only keep identities where at least one linked file was AI Extracted
     initial_count = len(global_df)
-    global_df = global_df[global_df['AI_Extracted'] == 'Yes']
+    global_df = global_df[global_df['ai_extracted'] == 'Yes']
 
-    global_df = global_df.sort_values(by=['Linked_Files_Count', 'Total_Rows_Merged'], ascending=[False, False])
+    global_df = global_df.sort_values(by=['linked_files_count', 'total_rows_merged'], ascending=[False, False])
 
     global_df.to_csv(output_csv, index=False, encoding='utf-8')
 

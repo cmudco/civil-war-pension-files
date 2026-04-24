@@ -10,9 +10,7 @@ from utils.clean_utils import standardize_nulls, long_text_comparison
 from names.names_utils import build_master_list, generate_global_master_csv
 
 load_dotenv()
-# Go up one level from the script to get to 'grouping_scripts', then up one more to get to the main repo
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-# Point directly to where the DB actually lives
 DB_PATH = os.path.join(ROOT_DIR, "transcriber_db.db")
 OUTPUT_DIR = os.path.join(ROOT_DIR, "grouping_scripts", "output")
 
@@ -148,7 +146,6 @@ def run_splink_linkage(master_df=None):
     global_master_csv = os.path.join(OUTPUT_DIR, "GLOBAL_MASTER_EXTRACTED.csv")
     generate_global_master_csv(DB_PATH, global_master_csv)
     print("  [DONE] Global resolution complete.\n")
-
 
 if __name__ == "__main__":
     run_splink_linkage()

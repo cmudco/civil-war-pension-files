@@ -5,14 +5,12 @@ import splink.comparison_level_library as cll
 from splink import DuckDBAPI, Linker
 
 from locations.locations_utils import (
-    clean_location_text, forgiving_geo_comparison, load_locations_from_db,
+    clean_location_text, load_locations_from_db,
     clean_geo_field
 )
 from utils.clean_utils import standardize_nulls
 
-# Go up one level from the script to get to 'grouping_scripts', then up one more to get to the main repo
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-# Point directly to where the DB actually lives
 DB_PATH = os.path.join(ROOT_DIR, "transcriber_db.db")
 OUTPUT_DIR = os.path.join(ROOT_DIR, "grouping_scripts", "output")
 
@@ -26,7 +24,6 @@ BLOCKING_JW_THRESH = 0.80
 
 PREDICT_THRESHOLD = 0.01
 DISPLAY_THRESHOLD = 0.10
-
 
 def test_location_thresholds(db_path, audit_csv_path):
     """Run Splink on locations at a very low threshold and print a score distribution audit."""
@@ -118,11 +115,47 @@ def test_location_thresholds(db_path, audit_csv_path):
                     {"sql_condition": "ELSE", "label_for_charts": "Mismatch VETO", "m_probability": 0.001, "u_probability": 0.90}
                 ]
             ),
-            forgiving_geo_comparison("city"),
-            forgiving_geo_comparison("county"),
-            forgiving_geo_comparison("state"),
-            forgiving_geo_comparison("country"),
-            forgiving_geo_comparison("type")
+            # THE METADATA BOOSTERS (Strictly Additive / Mathematically Neutral on Mismatch)
+            cl.CustomComparison(
+                output_column_name="city_match",
+                comparison_levels=[
+                    cll.NullLevel("city"),
+                    {"sql_condition": "city_l = city_r", "label_for_charts": "City Match", "m_probability": 0.80, "u_probability": 0.10},
+                    {"sql_condition": "ELSE", "label_for_charts": "Neutral Clash", "m_probability": 0.50, "u_probability": 0.50} 
+                ]
+            ),
+            cl.CustomComparison(
+                output_column_name="county_match",
+                comparison_levels=[
+                    cll.NullLevel("county"),
+                    {"sql_condition": "county_l = county_r", "label_for_charts": "County Match", "m_probability": 0.80, "u_probability": 0.10},
+                    {"sql_condition": "ELSE", "label_for_charts": "Neutral Clash", "m_probability": 0.50, "u_probability": 0.50}
+                ]
+            ),
+            cl.CustomComparison(
+                output_column_name="state_match",
+                comparison_levels=[
+                    cll.NullLevel("state"),
+                    {"sql_condition": "state_l = state_r", "label_for_charts": "State Match", "m_probability": 0.80, "u_probability": 0.10},
+                    {"sql_condition": "ELSE", "label_for_charts": "Neutral Clash", "m_probability": 0.50, "u_probability": 0.50}
+                ]
+            ),
+            cl.CustomComparison(
+                output_column_name="country_match",
+                comparison_levels=[
+                    cll.NullLevel("country"),
+                    {"sql_condition": "country_l = country_r", "label_for_charts": "Country Match", "m_probability": 0.80, "u_probability": 0.10},
+                    {"sql_condition": "ELSE", "label_for_charts": "Neutral Clash", "m_probability": 0.50, "u_probability": 0.50}
+                ]
+            ),
+            cl.CustomComparison(
+                output_column_name="type_match",
+                comparison_levels=[
+                    cll.NullLevel("type"),
+                    {"sql_condition": "type_l = type_r", "label_for_charts": "Type Match", "m_probability": 0.60, "u_probability": 0.20},
+                    {"sql_condition": "ELSE", "label_for_charts": "Neutral Clash", "m_probability": 0.50, "u_probability": 0.50}
+                ]
+            )
         ],
         "blocking_rules_to_generate_predictions": [
             f"""
@@ -227,7 +260,6 @@ def test_location_thresholds(db_path, audit_csv_path):
         f.write('\n'.join(html))
 
     print(f"  [DONE] {len(scores_df):,} predictions -> {audit_csv_path}")
-
 
 if __name__ == "__main__":
     print("\n[TEST] Local Locations Threshold Analysis")

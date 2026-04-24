@@ -60,15 +60,11 @@ def main():
             master_df.to_csv(master_csv, index=False)
             print(f"  [DONE] Master profiles -> {master_csv}")
     
-    # 2. Build the Master List ONCE
-    print("\n Building Master Profile List...")
-    master_df = build_master_list(DB_PATH)
-    
-    # 3. Pass it to Extraction (Phase 2)
+    # 2. Pass it to Extraction (Phase 2)
     # Phase 2 returns an updated master_df that includes the new Gemini extractions
     enriched_master_df = run_extraction_pipeline(master_df)
     
-    # 4. Pass the enriched data straight into Global Linkage (Phase 3)
+    # 3. Pass the enriched data straight into Global Linkage (Phase 3)
     run_splink_linkage(enriched_master_df)
 
     print("\n✅ FULL PIPELINE COMPLETE.")

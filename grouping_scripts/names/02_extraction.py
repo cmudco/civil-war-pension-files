@@ -15,9 +15,7 @@ from names.names_utils import build_master_list
 
 load_dotenv()
 
-# Go up one level from the script to get to 'grouping_scripts', then up one more to get to the main repo
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-# Point directly to where the DB actually lives
 DB_PATH = os.path.join(ROOT_DIR, "transcriber_db.db")
 
 # --- CONFIGURATION ---
@@ -42,7 +40,6 @@ def get_embedding_with_retry(text, retries=5):
             else:
                 return None
     return None
-
 
 def extract_bio_from_file(weaviate_client, name, file_name):
     collection = weaviate_client.collections.get("CivilWarPensionPage")
@@ -95,7 +92,6 @@ def extract_bio_from_file(weaviate_client, name, file_name):
                 return None
     return None
 
-
 def run_extraction_pipeline(master_df=None):
     print("\n[STEP 2] AI Bio Extraction")
     print("=" * 50)
@@ -145,9 +141,8 @@ def run_extraction_pipeline(master_df=None):
         conn.close()
     finally:
         client.close()
-        
-    return build_master_list(DB_PATH)
 
+    return build_master_list(DB_PATH)
 
 if __name__ == "__main__":
     run_extraction_pipeline()
