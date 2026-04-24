@@ -28,7 +28,8 @@ genai_client = genai.Client(
 
 EMBEDDING_MODEL = "gemini-embedding-2-preview"
 GENERATION_MODEL = "gemini-2.5-flash"
-
+BATCH_LIMIT = 10
+CHUNK_LIMIT = 15
 
 def get_embedding_with_retry(text, retries=5):
     for i in range(retries):
@@ -51,7 +52,7 @@ def extract_bio_from_file(weaviate_client, name, file_name):
 
     try:
         response = collection.query.near_vector(
-            near_vector=query_vector, limit=15, filters=Filter.by_property("pdf_file").equal(file_name)
+            near_vector=query_vector, limit=CHUNK_LIMIT, filters=Filter.by_property("pdf_file").equal(file_name)
         )
     except Exception:
         return None
@@ -95,16 +96,17 @@ def extract_bio_from_file(weaviate_client, name, file_name):
     return None
 
 
-def run_extraction_pipeline():
+def run_extraction_pipeline(master_df=None):
     print("\n[STEP 2] AI Bio Extraction")
     print("=" * 50)
-    master_df = build_master_list(DB_PATH)
+    
+    if master_df is None:
+        master_df = build_master_list(DB_PATH)
 
     if master_df.empty:
-        return
+        return master_df
 
     # --- BATCH CONTROL ---
-    BATCH_LIMIT = 10
     missing_tasks = master_df[~master_df['gemini_extracted'].astype(str).isin(['1', '1.0'])].head(BATCH_LIMIT)
 
     if missing_tasks.empty:
@@ -143,6 +145,8 @@ def run_extraction_pipeline():
         conn.close()
     finally:
         client.close()
+        
+    return build_master_list(DB_PATH)
 
 
 if __name__ == "__main__":

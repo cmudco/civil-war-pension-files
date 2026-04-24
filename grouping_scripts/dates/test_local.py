@@ -6,7 +6,7 @@ from dates.dates_utils import load_dates_from_db
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Point directly to where the DB actually lives
 DB_PATH = os.path.join(ROOT_DIR, "transcriber_db.db")
-LOCATIONS_DIR = os.path.dirname(os.path.abspath(__file__))
+DATES_DIR = os.path.dirname(os.path.abspath(__file__))
 
 def test_local_dates(db_path, output_html):
     print("Loading raw dates from database...")
@@ -81,5 +81,5 @@ def test_local_dates(db_path, output_html):
 if __name__ == "__main__":
     print("\n[TEST] Local Dates Audit Report")
     print("=" * 50)
-    audit_html = os.path.join(LOCATIONS_DIR, "test_local_predictions.html")
+    audit_html = os.path.join(DATES_DIR, "test_local_predictions.html")
     test_local_dates(DB_PATH, audit_html)

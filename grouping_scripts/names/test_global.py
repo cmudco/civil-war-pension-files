@@ -30,23 +30,10 @@ TABLE_STYLE = """
   th { background: #2d2d44; color: #a8b2d1; padding: 6px 10px; text-align: left; font-weight: 600; position: sticky; top: 0; }
   td { padding: 5px 10px; border-bottom: 1px solid #2d2d44; white-space: nowrap; }
   tr:hover { background: #2d2d44; }
-  .prob-high { color: #64ffda; font-weight: 600; }
-  .prob-mid  { color: #ffd93d; }
-  .prob-low  { color: #8892b0; }
   .singleton { color: #8892b0; font-style: italic; font-size: 12px; }
   .merged { color: #64ffda; font-size: 12px; }
 </style>
 """
-
-
-def _prob_class(val):
-    try:
-        v = float(val)
-        if v >= 0.65: return 'prob-high'
-        if v >= 0.30: return 'prob-mid'
-    except (ValueError, TypeError):
-        pass
-    return 'prob-low'
 
 
 def run_global_audit(db_path, audit_csv_path, patterns):
@@ -118,8 +105,7 @@ def run_global_audit(db_path, audit_csv_path, patterns):
                 prob_str = f"{prob_val:.3f}" if pd.notna(prob_val) else "—"
                 wt_val = row['match_weight']
                 wt_str = f"{wt_val:.3f}" if pd.notna(wt_val) else "—"
-                cls = _prob_class(prob_val)
-                html.append(f"<tr><td>{name}</td><td>{row['local_id']}</td><td>{row['pdf_short']}</td><td class='{cls}'>{prob_str}</td><td class='{cls}'>{wt_str}</td></tr>")
+                html.append(f"<tr><td>{name}</td><td>{row['local_id']}</td><td>{row['pdf_short']}</td><td>{prob_str}</td><td>{wt_str}</td></tr>")
             html.append("</table>")
 
     html.append("</body></html>")

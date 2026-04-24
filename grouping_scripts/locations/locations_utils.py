@@ -92,33 +92,6 @@ def clean_and_merge_context(context_series):
 
     return ' ... '.join(final_strings)
 
-
-def forgiving_geo_comparison(col_name):
-    """Applies a boost for geo matches, but handles the 'type' column with more forgiveness."""
-    
-    # THE FIX: If the AI classified the 'type' differently (e.g. "city" vs "other"),
-    # we apply a neutral/soft penalty instead of a harsh mathematical veto.
-    if col_name == 'type':
-        return cl.CustomComparison(
-            output_column_name=f"{col_name}_match",
-            comparison_levels=[
-                cll.NullLevel(col_name),
-                {"sql_condition": f"{col_name}_l = {col_name}_r", "label_for_charts": "Exact Match", "m_probability": 0.85, "u_probability": 0.10},
-                {"sql_condition": "ELSE", "label_for_charts": "Type Clash (Forgiven)", "m_probability": 0.30, "u_probability": 0.70} # Much softer penalty
-            ]
-        )
-    
-    # Normal rules for City, County, State, Country
-    return cl.CustomComparison(
-        output_column_name=f"{col_name}_match",
-        comparison_levels=[
-            cll.NullLevel(col_name),
-            {"sql_condition": f"{col_name}_l = {col_name}_r", "label_for_charts": "Exact Match", "m_probability": 0.85, "u_probability": 0.10},
-            {"sql_condition": "ELSE", "label_for_charts": "Mismatch", "m_probability": 0.05, "u_probability": 0.90}
-        ]
-    )
-
-
 def load_locations_from_db(db_path, custom_where=""):
     """Load and normalize raw location records from the database."""
     print("  [LOAD] Loading raw locations from database...")

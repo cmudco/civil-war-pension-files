@@ -4,7 +4,6 @@ import splink.comparison_library as cl
 import splink.comparison_level_library as cll
 from splink import DuckDBAPI, Linker
 
-# FIX: Removed forgiving_geo_comparison since we are hardcoding the neutral math below
 from locations.locations_utils import (
     clean_location_text, clean_and_merge_context, load_locations_from_db,
     clean_geo_field
