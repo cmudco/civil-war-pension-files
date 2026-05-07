@@ -18,6 +18,8 @@ Use this README as a short entry point, then jump to the more detailed docs belo
 - [ZOONIVERSE_SETUP_CHECKLIST.md](ZOONIVERSE_SETUP_CHECKLIST.md)
   For the manual post-upload checks in the Zooniverse interface.
 
+- Please contact cathyw at andrew dot cmu for any questions
+
 ## What This Folder Does
 
 The pipeline is:

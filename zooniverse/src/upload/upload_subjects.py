@@ -10,10 +10,10 @@ from panoptes_client.panoptes import PanoptesAPIException
 from panoptes_client.set_member_subject import SetMemberSubject
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-USERNAME = os.getenv("ZOONIVERSE_USERNAME", "usct_pension_files")
-PASSWORD = os.getenv("ZOONIVERSE_PASSWORD", "usct2026")
+USERNAME = os.getenv("ZOONIVERSE_USERNAME", "your-zooniverse-username") # please ask Dr Fields Black for the username
+PASSWORD = os.getenv("ZOONIVERSE_PASSWORD", "your-zooniverse-password") # please ask Dr Fields Black for the password
 PROJECT_ID = int(os.getenv("ZOONIVERSE_PROJECT_ID", "32086"))
-SUBJECT_SET_NAME = os.getenv("SUBJECT_SET_NAME", "Initial Transcription Review")
+SUBJECT_SET_NAME = os.getenv("SUBJECT_SET_NAME", "Initial Full Transcription")
 MANIFEST_PATH = Path(os.getenv("MANIFEST_PATH", REPO_ROOT / "dataset/manifest.csv"))
 BATCH_SIZE = int(os.getenv("SUBJECT_SET_BATCH_SIZE", "25"))
 RESUME_SKIP_COUNT = int(os.getenv("RESUME_SKIP_COUNT", "0"))
