@@ -2,7 +2,7 @@
 
 Logic flow of this repo: 
 
-![Repo Logic Flow](assets/repo_logic_flow.jpg)
+![Repo Logic Flow](assets/architecture.png)
 
 ## Project Scope
 

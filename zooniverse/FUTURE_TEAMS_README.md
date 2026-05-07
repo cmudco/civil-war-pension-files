@@ -1,9 +1,5 @@
 # Future Teams Readme (Zooniverse Component)
 
-Architecture diagram: `assets/repo_logic_flow.jpg`
-
-![Repo Logic Flow](assets/repo_logic_flow.jpg)
-
 ## Project Context
 
 This project is larger than the upload scripts, but this repo mainly covers the Zooniverse validation layer.
@@ -23,6 +19,10 @@ Each subject contains:
 - a small amount of metadata for traceability
 
 The important design choice is that the volunteer edits happen inside the Zooniverse text box, not in a metadata panel. That is why the upload script now uses paired `.txt` files instead of relying on a metadata field like `AI Transcript`.
+
+Architecture diagram: `assets/repo_logic_flow.jpg`
+
+![Repo Logic Flow](assets/repo_logic_flow.jpg)
 
 ## Current Data Flow
 
